@@ -6,10 +6,10 @@ Traverses all files in a directory with flexible exclusion options.
 Supports excluding directories, file extensions, and specific file names.
 """
 
-import os
 import argparse
+import os
 from pathlib import Path
-from typing import List, Set, Optional
+from typing import List, Optional
 
 
 class FileTraverser:
@@ -37,7 +37,8 @@ class FileTraverser:
         if not self.path.is_dir():
             raise NotADirectoryError(f"Path is not a directory: {self.path}")
 
-    def _normalize_extensions(self, extensions: List[str]) -> List[str]:
+    @staticmethod
+    def _normalize_extensions(extensions: List[str]) -> List[str]:
         """Normalize extensions to include leading dots."""
         normalized = []
         for ext in extensions:
@@ -189,66 +190,92 @@ class FileTraverser:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Traverse directory files with exclusion options",
+        description="Traverse one or more directories with exclusion options",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  %(prog)s /path/to/dir
-  %(prog)s . --output combined.txt
-  %(prog)s ~/project --exclude-dirs __pycache__ .git --output project_code.txt
-  %(prog)s /src --exclude-ext .pyc .log --output source_files.txt
-  %(prog)s . --exclude-names config.json --list-only
-  %(prog)s . --info
+  %(prog)s src app
+  %(prog)s src app --output combined.txt
+  %(prog)s src app --exclude-dirs __pycache__ .git --output code.txt
+  %(prog)s src app --exclude-ext .pyc .log --list-only
+  %(prog)s src app --info
         """
     )
 
-    parser.add_argument('path',
-                        help='Directory path (relative or absolute)')
+    # CHANGE 1: allow *multiple* directories
+    parser.add_argument('paths',
+                        nargs='+',                # ← accept 1-N paths
+                        help='One or more directory paths')
 
-    parser.add_argument('--exclude-dirs',
-                        nargs='*',
-                        default=[],
-                        help='Directory names to exclude (optional)')
+    parser.add_argument('--exclude-dirs', nargs='*', default=[],
+                        help='Directory names to exclude')
 
-    parser.add_argument('--exclude-ext',
-                        nargs='*',
-                        default=[],
-                        help='File extensions to exclude (optional, e.g., .pyc .log)')
+    parser.add_argument('--exclude-ext', nargs='*', default=[],
+                        help='File extensions to exclude (e.g. .pyc .log)')
 
-    parser.add_argument('--exclude-names',
-                        nargs='*',
-                        default=[],
-                        help='Full file names to exclude (optional)')
+    parser.add_argument('--exclude-names', nargs='*', default=[],
+                        help='Full file names to exclude')
 
-    parser.add_argument('--output', '-o',
-                        default='combined_files.txt',
-                        help='Output file name (default: combined_files.txt)')
+    parser.add_argument('-o', '--output', default='combined_files.txt',
+                        help='Output file name')
 
-    parser.add_argument('--list-only',
-                        action='store_true',
+    parser.add_argument('--list-only', action='store_true',
                         help='List file names only, do not combine contents')
 
-    parser.add_argument('--info',
-                        action='store_true',
-                        help='Show detailed file information instead of listing files')
+    parser.add_argument('--info', action='store_true',
+                        help='Show detailed file information')
 
     args = parser.parse_args()
 
+    # CHANGE 2: loop over all supplied paths
     try:
-        traverser = FileTraverser(
-            path=args.path,
-            exclude_dirs=args.exclude_dirs,
-            exclude_extensions=args.exclude_ext,
-            exclude_names=args.exclude_names
-        )
+        # When combining contents we open the output file *once*
+        # and let each traverser append to it.
+        outfile_handle = None
+        if not args.list_only and not args.info:
+            outfile_handle = open(args.output, 'w', encoding='utf-8')
 
-        if args.info:
-            traverser.get_file_info()
-        elif args.list_only:
-            traverser.print_files()
-        else:
-            # Default behavior: combine file contents into output file
-            traverser.write_files_to_output(args.output)
+        for path in args.paths:
+            traverser = FileTraverser(
+                path=path,
+                exclude_dirs=args.exclude_dirs,
+                exclude_extensions=args.exclude_ext,
+                exclude_names=args.exclude_names
+            )
+
+            if args.info:
+                traverser.get_file_info()
+            elif args.list_only:
+                traverser.print_files()
+            else:
+                # reuse FileTraverser internals but stream to the
+                # shared handle so every directory goes in one file
+                files = traverser.traverse()
+                if not files:
+                    continue
+
+                outfile_handle.write(f"{'='*80}\n")
+                outfile_handle.write(f"Directory: {traverser.path}\n")
+                outfile_handle.write(f"Total files: {len(files)}\n")
+                outfile_handle.write(f"{'='*80}\n\n")
+
+                for file_path in sorted(files):
+                    relative = file_path.relative_to(traverser.path)
+                    outfile_handle.write(f"{'='*20} FILE: {relative} {'='*20}\n")
+                    try:
+                        with open(file_path, 'r', encoding='utf-8') as f:
+                            content = f.read()
+                    except UnicodeDecodeError:
+                        with open(file_path, 'r', encoding='latin-1') as f:
+                            content = f"[latin-1 decoded]\n" + f.read()
+                    outfile_handle.write(content)
+                    if not content.endswith('\n'):
+                        outfile_handle.write('\n')
+                    outfile_handle.write(f"\n{'='*60}\n\n")
+
+        if outfile_handle:
+            outfile_handle.close()
+            print(f"Combined output written to '{args.output}'")
 
     except (FileNotFoundError, NotADirectoryError) as e:
         print(f"Error: {e}")
