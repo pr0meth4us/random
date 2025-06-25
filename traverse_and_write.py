@@ -2,22 +2,99 @@
 """
 Directory File Traversal Script
 
-Traverses all files in a directory with flexible exclusion options.
-Supports excluding directories, file extensions, and specific file names.
+Traverses all files in a directory with intelligent exclusion defaults.
+By default excludes common binary files, images, build artifacts, and dependency directories.
 """
 
 import argparse
 import os
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Set
 
 
 class FileTraverser:
+    # Default directories to exclude (common build/dependency folders)
+    DEFAULT_EXCLUDE_DIRS = {
+        # Python
+        '__pycache__', '.pytest_cache', 'venv', '.venv', 'env', '.env',
+        'site-packages', '.tox', 'build', 'dist', '*.egg-info',
+
+        # Node.js
+        'node_modules', '.npm', '.yarn',
+
+        # Version control
+        '.git', '.svn', '.hg', '.bzr',
+
+        # IDEs
+        '.vscode', '.idea', '.vs', '__pycache__',
+
+        # Build systems
+        'target', 'bin', 'obj', 'out', 'cmake-build-debug', 'cmake-build-release',
+
+        # Others
+        '.cache', '.tmp', 'temp', 'logs', '.logs'
+    }
+
+    # Default file extensions to exclude
+    DEFAULT_EXCLUDE_EXTENSIONS = {
+        # Compiled/Binary
+        '.pyc', '.pyo', '.pyd', '.so', '.dll', '.dylib', '.exe', '.bin', '.o', '.obj',
+        '.class', '.jar', '.war', '.ear',
+
+        # Images
+        '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.tif', '.svg', '.ico',
+        '.webp', '.raw', '.cr2', '.nef', '.orf', '.sr2',
+
+        # Videos
+        '.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.3gp',
+
+        # Audio
+        '.mp3', '.wav', '.flac', '.aac', '.ogg', '.wma', '.m4a',
+
+        # Archives
+        '.zip', '.rar', '.7z', '.tar', '.gz', '.bz2', '.xz', '.lzma',
+
+        # Documents (often binary)
+        '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
+
+        # Fonts
+        '.ttf', '.otf', '.woff', '.woff2', '.eot',
+
+        # Database
+        '.db', '.sqlite', '.sqlite3', '.mdb',
+
+        # Log files (can be huge)
+        '.log', '.out',
+
+        # Temporary files
+        '.tmp', '.temp', '.swp', '.swo', '.bak', '.backup', '~',
+
+        # Package files
+        '.deb', '.rpm', '.msi', '.dmg', '.pkg',
+
+        # Certificates
+        '.p12', '.pfx', '.crt', '.cer', '.key', '.pem'
+    }
+
+    # Default filenames to exclude
+    DEFAULT_EXCLUDE_NAMES = {
+        # System files
+        '.DS_Store', 'Thumbs.db', 'desktop.ini',
+
+        # Lock files
+        'package-lock.json', 'yarn.lock', 'Pipfile.lock', 'poetry.lock',
+        'composer.lock', 'Gemfile.lock',
+
+        # Large config/data files
+        'requirements.txt'  # Remove this if you want to include requirements
+    }
+
     def __init__(self,
                  path: str,
                  exclude_dirs: Optional[List[str]] = None,
                  exclude_extensions: Optional[List[str]] = None,
-                 exclude_names: Optional[List[str]] = None):
+                 exclude_names: Optional[List[str]] = None,
+                 use_defaults: bool = True):
         """
         Initialize the file traverser.
 
@@ -26,11 +103,27 @@ class FileTraverser:
             exclude_dirs: List of directory names to exclude
             exclude_extensions: List of file extensions to exclude (with or without dots)
             exclude_names: List of full file names to exclude
+            use_defaults: Whether to use smart default exclusions
         """
         self.path = Path(path).resolve()
-        self.exclude_dirs = set(exclude_dirs or [])
-        self.exclude_extensions = set(self._normalize_extensions(exclude_extensions or []))
-        self.exclude_names = set(exclude_names or [])
+
+        # Start with defaults if enabled
+        if use_defaults:
+            self.exclude_dirs = self.DEFAULT_EXCLUDE_DIRS.copy()
+            self.exclude_extensions = self.DEFAULT_EXCLUDE_EXTENSIONS.copy()
+            self.exclude_names = self.DEFAULT_EXCLUDE_NAMES.copy()
+        else:
+            self.exclude_dirs = set()
+            self.exclude_extensions = set()
+            self.exclude_names = set()
+
+        # Add user-specified exclusions
+        if exclude_dirs:
+            self.exclude_dirs.update(exclude_dirs)
+        if exclude_extensions:
+            self.exclude_extensions.update(self._normalize_extensions(exclude_extensions))
+        if exclude_names:
+            self.exclude_names.update(exclude_names)
 
         if not self.path.exists():
             raise FileNotFoundError(f"Directory not found: {self.path}")
@@ -38,13 +131,13 @@ class FileTraverser:
             raise NotADirectoryError(f"Path is not a directory: {self.path}")
 
     @staticmethod
-    def _normalize_extensions(extensions: List[str]) -> List[str]:
-        """Normalize extensions to include leading dots."""
-        normalized = []
+    def _normalize_extensions(extensions: List[str]) -> Set[str]:
+        """Normalize extensions to include leading dots and lowercase."""
+        normalized = set()
         for ext in extensions:
             if not ext.startswith('.'):
                 ext = '.' + ext
-            normalized.append(ext.lower())
+            normalized.add(ext.lower())
         return normalized
 
     def _should_exclude_dir(self, dir_name: str) -> bool:
@@ -59,6 +152,10 @@ class FileTraverser:
 
         # Check extension exclusion
         if file_path.suffix.lower() in self.exclude_extensions:
+            return True
+
+        # Check for hidden files (starting with .)
+        if file_path.name.startswith('.') and file_path.name not in {'.gitignore', '.env.example'}:
             return True
 
         return False
@@ -119,16 +216,8 @@ class FileTraverser:
                                 if not content.endswith('\n'):
                                     outfile.write('\n')
                         except UnicodeDecodeError:
-                            # Try with different encoding for non-UTF-8 files
-                            try:
-                                with open(file_path, 'r', encoding='latin-1') as infile:
-                                    content = infile.read()
-                                    outfile.write(f"[Binary/Non-UTF-8 file content - decoded with latin-1]\n")
-                                    outfile.write(content)
-                                    if not content.endswith('\n'):
-                                        outfile.write('\n')
-                            except Exception as e:
-                                outfile.write(f"[Error reading file: {e}]\n")
+                            # Skip binary files rather than trying to decode
+                            outfile.write(f"[Skipped: Binary file detected]\n")
                         except Exception as e:
                             outfile.write(f"[Error reading file: {e}]\n")
 
@@ -156,11 +245,9 @@ class FileTraverser:
 
         for file_path in sorted(files):
             try:
-                # Try to show relative path from the base directory
                 relative_path = file_path.relative_to(self.path)
                 print(f"{relative_path}")
             except ValueError:
-                # If relative path fails, show absolute path
                 print(f"{file_path}")
 
     def get_file_info(self):
@@ -187,34 +274,41 @@ class FileTraverser:
         for ext, count in sorted(file_types.items()):
             print(f"  {ext}: {count} files")
 
+    def print_exclusions(self):
+        """Print current exclusion settings for debugging."""
+        print("Current exclusion settings:")
+        print(f"Excluded directories ({len(self.exclude_dirs)}): {sorted(self.exclude_dirs)}")
+        print(f"Excluded extensions ({len(self.exclude_extensions)}): {sorted(self.exclude_extensions)}")
+        print(f"Excluded filenames ({len(self.exclude_names)}): {sorted(self.exclude_names)}")
+
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Traverse one or more directories with exclusion options",
+        description="Traverse directories with intelligent exclusion defaults",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  %(prog)s src app
-  %(prog)s src app --output combined.txt
-  %(prog)s src app --exclude-dirs __pycache__ .git --output code.txt
-  %(prog)s src app --exclude-ext .pyc .log --list-only
-  %(prog)s src app --info
+  %(prog)s src app                           # Use smart defaults
+  %(prog)s src --no-defaults --exclude-ext .py  # No defaults, only exclude .py
+  %(prog)s src --exclude-dirs build target      # Add to default exclusions
+  %(prog)s src --list-only                       # List files that would be processed
+  %(prog)s src --show-exclusions                 # Show what's being excluded
         """
     )
 
-    # CHANGE 1: allow *multiple* directories
-    parser.add_argument('paths',
-                        nargs='+',                # ← accept 1-N paths
-                        help='One or more directory paths')
+    parser.add_argument('paths', nargs='+', help='One or more directory paths')
 
     parser.add_argument('--exclude-dirs', nargs='*', default=[],
-                        help='Directory names to exclude')
+                        help='Additional directory names to exclude')
 
     parser.add_argument('--exclude-ext', nargs='*', default=[],
-                        help='File extensions to exclude (e.g. .pyc .log)')
+                        help='Additional file extensions to exclude (e.g. .pyc .log)')
 
     parser.add_argument('--exclude-names', nargs='*', default=[],
-                        help='Full file names to exclude')
+                        help='Additional full file names to exclude')
+
+    parser.add_argument('--no-defaults', action='store_true',
+                        help='Disable default exclusions (only use specified exclusions)')
 
     parser.add_argument('-o', '--output', default='combined_files.txt',
                         help='Output file name')
@@ -225,14 +319,15 @@ Examples:
     parser.add_argument('--info', action='store_true',
                         help='Show detailed file information')
 
+    parser.add_argument('--show-exclusions', action='store_true',
+                        help='Show current exclusion settings')
+
     args = parser.parse_args()
 
-    # CHANGE 2: loop over all supplied paths
     try:
-        # When combining contents we open the output file *once*
-        # and let each traverser append to it.
+        # When combining contents we open the output file once
         outfile_handle = None
-        if not args.list_only and not args.info:
+        if not args.list_only and not args.info and not args.show_exclusions:
             outfile_handle = open(args.output, 'w', encoding='utf-8')
 
         for path in args.paths:
@@ -240,38 +335,51 @@ Examples:
                 path=path,
                 exclude_dirs=args.exclude_dirs,
                 exclude_extensions=args.exclude_ext,
-                exclude_names=args.exclude_names
+                exclude_names=args.exclude_names,
+                use_defaults=not args.no_defaults
             )
 
-            if args.info:
+            if args.show_exclusions:
+                print(f"\nExclusions for {path}:")
+                traverser.print_exclusions()
+                print()
+            elif args.info:
                 traverser.get_file_info()
             elif args.list_only:
                 traverser.print_files()
             else:
-                # reuse FileTraverser internals but stream to the
-                # shared handle so every directory goes in one file
+                # Combine files to output
                 files = traverser.traverse()
                 if not files:
+                    print(f"No files found in {path}")
                     continue
 
-                outfile_handle.write(f"{'='*80}\n")
+                outfile_handle.write(f"{'=' * 80}\n")
                 outfile_handle.write(f"Directory: {traverser.path}\n")
                 outfile_handle.write(f"Total files: {len(files)}\n")
-                outfile_handle.write(f"{'='*80}\n\n")
+                outfile_handle.write(f"{'=' * 80}\n\n")
 
                 for file_path in sorted(files):
-                    relative = file_path.relative_to(traverser.path)
-                    outfile_handle.write(f"{'='*20} FILE: {relative} {'='*20}\n")
                     try:
-                        with open(file_path, 'r', encoding='utf-8') as f:
-                            content = f.read()
-                    except UnicodeDecodeError:
-                        with open(file_path, 'r', encoding='latin-1') as f:
-                            content = f"[latin-1 decoded]\n" + f.read()
-                    outfile_handle.write(content)
-                    if not content.endswith('\n'):
-                        outfile_handle.write('\n')
-                    outfile_handle.write(f"\n{'='*60}\n\n")
+                        relative = file_path.relative_to(traverser.path)
+                        outfile_handle.write(f"{'=' * 20} FILE: {relative} {'=' * 20}\n")
+
+                        try:
+                            with open(file_path, 'r', encoding='utf-8') as f:
+                                content = f.read()
+                        except UnicodeDecodeError:
+                            outfile_handle.write(f"[Skipped: Binary file detected]\n")
+                            continue
+                        except Exception as e:
+                            outfile_handle.write(f"[Error reading file: {e}]\n")
+                            continue
+
+                        outfile_handle.write(content)
+                        if not content.endswith('\n'):
+                            outfile_handle.write('\n')
+                        outfile_handle.write(f"\n{'=' * 60}\n\n")
+                    except Exception as e:
+                        print(f"Warning: Could not process {file_path}: {e}")
 
         if outfile_handle:
             outfile_handle.close()
