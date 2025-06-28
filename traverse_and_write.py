@@ -4,6 +4,7 @@ Directory File Traversal Script
 
 Traverses all files in a directory with intelligent exclusion defaults.
 By default excludes common binary files, images, build artifacts, and dependency directories.
+Enhanced with comprehensive Java/Spring Boot exclusions.
 """
 
 import argparse
@@ -20,30 +21,45 @@ class FileTraverser:
         'site-packages', '.tox', 'build', 'dist', '*.egg-info',
 
         # Node.js
-        'node_modules', '.npm', '.yarn',
+        'node_modules', '.npm', '.yarn', '.pnpm-store',
+
+        # Next.js / React / Frontend
+        '.next', 'out', 'build', 'dist', '.cache', '.parcel-cache',
+        '.nuxt', '.output', '.vercel', '.netlify', 'coverage',
+        '.turbo', '.swc', 'storybook-static', '.storybook',
+        '.docusaurus', '.vuepress', '.gatsby-cache', 'public/sw.js',
+
+        # Java/Spring Boot/Maven/Gradle
+        'target', '.gradle', '.m2', 'bin', 'classes', 'test-classes',
+        'generated-sources', 'generated-test-sources', '.mvn',
+        'gradle-wrapper', 'wrapper',
 
         # Version control
         '.git', '.svn', '.hg', '.bzr',
 
         # IDEs
-        '.vscode', '.idea', '.vs', '__pycache__',
+        '.vscode', '.idea', '.vs', '.eclipse', '.metadata', '.recommenders',
+        '.settings', 'nbproject',
 
         # Build systems
-        'target', 'bin', 'obj', 'out', 'cmake-build-debug', 'cmake-build-release',
+        'cmake-build-debug', 'cmake-build-release',
 
         # Others
-        '.cache', '.tmp', 'temp', 'logs', '.logs'
+        '.tmp', 'temp', 'logs', '.logs'
     }
 
     # Default file extensions to exclude
     DEFAULT_EXCLUDE_EXTENSIONS = {
         # Compiled/Binary
         '.pyc', '.pyo', '.pyd', '.so', '.dll', '.dylib', '.exe', '.bin', '.o', '.obj',
-        '.class', '.jar', '.war', '.ear',
+        '.class', '.jar', '.war', '.ear', '.jmod',
+
+        # Source maps and compiled JS/CSS
+        '.map', '.min.js', '.min.css',
 
         # Images
         '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.tif', '.svg', '.ico',
-        '.webp', '.raw', '.cr2', '.nef', '.orf', '.sr2',
+        '.webp', '.raw', '.cr2', '.nef', '.orf', '.sr2', '.avif',
 
         # Videos
         '.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.3gp',
@@ -82,11 +98,45 @@ class FileTraverser:
         '.DS_Store', 'Thumbs.db', 'desktop.ini',
 
         # Lock files
-        'package-lock.json', 'yarn.lock', 'Pipfile.lock', 'poetry.lock',
-        'composer.lock', 'Gemfile.lock',
+        'package-lock.json', 'yarn.lock', 'pnpm-lock.yaml', 'bun.lockb',
+        'Pipfile.lock', 'poetry.lock', 'composer.lock', 'Gemfile.lock',
+
+        # Next.js / React / Frontend specific
+        'next-env.d.ts', 'next.config.js', 'next.config.mjs', 'next.config.ts',
+        'tsconfig.tsbuildinfo', '.eslintcache', '.stylelintcache',
+        'sw.js', 'workbox-*.js', 'precache-manifest.*.js', 'service-worker.js',
+        '.env.local', '.env.development.local', '.env.test.local', '.env.production.local',
+        'cypress.json', 'jest.config.js', 'jest.config.ts', 'vitest.config.js',
+        'playwright.config.js', 'playwright.config.ts',
+
+        # Java/Spring Boot specific files
+        '.env', 'application.properties', 'application.yml', 'application.yaml',
+        'application-dev.properties', 'application-prod.properties', 'application-test.properties',
+        'application-local.properties', 'bootstrap.properties', 'bootstrap.yml',
+        'gradle.properties', 'gradlew', 'gradlew.bat', 'mvnw', 'mvnw.cmd',
+        'pom.xml.versionsBackup', '.classpath', '.project',
 
         # Large config/data files
         'requirements.txt'  # Remove this if you want to include requirements
+    }
+
+    # Special patterns for more complex exclusions
+    DEFAULT_EXCLUDE_PATTERNS = {
+        # Environment files
+        r'\.env.*',  # .env, .env.local, .env.production, etc.
+        r'application-.*\.properties',  # application-{profile}.properties
+        r'application-.*\.ya?ml',  # application-{profile}.yml/yaml
+
+        # Next.js / Frontend patterns
+        r'.*\.chunk\.js',  # webpack chunks
+        r'.*\.chunk\.css',  # webpack chunks
+        r'.*-[a-f0-9]{8,}\.js',  # hashed filenames
+        r'.*-[a-f0-9]{8,}\.css',  # hashed filenames
+        r'sw\.js',  # service worker
+        r'workbox-.*\.js',  # workbox files
+        r'precache-manifest\..*\.js',  # precache manifest
+        r'.*\.hot-update\.js',  # webpack hot updates
+        r'.*\.hot-update\.json',  # webpack hot updates
     }
 
     def __init__(self,
@@ -112,10 +162,12 @@ class FileTraverser:
             self.exclude_dirs = self.DEFAULT_EXCLUDE_DIRS.copy()
             self.exclude_extensions = self.DEFAULT_EXCLUDE_EXTENSIONS.copy()
             self.exclude_names = self.DEFAULT_EXCLUDE_NAMES.copy()
+            self.exclude_patterns = self.DEFAULT_EXCLUDE_PATTERNS.copy()
         else:
             self.exclude_dirs = set()
             self.exclude_extensions = set()
             self.exclude_names = set()
+            self.exclude_patterns = set()
 
         # Add user-specified exclusions
         if exclude_dirs:
@@ -145,7 +197,9 @@ class FileTraverser:
         return dir_name in self.exclude_dirs
 
     def _should_exclude_file(self, file_path: Path) -> bool:
-        """Check if file should be excluded based on extension or name."""
+        """Check if file should be excluded based on extension, name, or pattern."""
+        import re
+
         # Check file name exclusion
         if file_path.name in self.exclude_names:
             return True
@@ -154,8 +208,16 @@ class FileTraverser:
         if file_path.suffix.lower() in self.exclude_extensions:
             return True
 
-        # Check for hidden files (starting with .)
-        if file_path.name.startswith('.') and file_path.name not in {'.gitignore', '.env.example'}:
+        # Check pattern exclusions
+        for pattern in self.exclude_patterns:
+            if re.match(pattern, file_path.name):
+                return True
+
+        # Check for hidden files (starting with .) but allow some exceptions
+        allowed_hidden = {'.gitignore', '.env.example', '.dockerignore', '.editorconfig',
+                          '.babelrc', '.eslintrc.js', '.eslintrc.json', '.prettierrc',
+                          '.prettierrc.json', '.nvmrc', '.node-version'}
+        if file_path.name.startswith('.') and file_path.name not in allowed_hidden:
             return True
 
         return False
@@ -280,6 +342,7 @@ class FileTraverser:
         print(f"Excluded directories ({len(self.exclude_dirs)}): {sorted(self.exclude_dirs)}")
         print(f"Excluded extensions ({len(self.exclude_extensions)}): {sorted(self.exclude_extensions)}")
         print(f"Excluded filenames ({len(self.exclude_names)}): {sorted(self.exclude_names)}")
+        print(f"Excluded patterns ({len(self.exclude_patterns)}): {sorted(self.exclude_patterns)}")
 
 
 def main():
@@ -288,7 +351,7 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  %(prog)s src app                           # Use smart defaults
+  %(prog)s src app                           # Use smart defaults (includes Next.js/Java/Spring Boot exclusions)
   %(prog)s src --no-defaults --exclude-ext .py  # No defaults, only exclude .py
   %(prog)s src --exclude-dirs build target      # Add to default exclusions
   %(prog)s src --list-only                       # List files that would be processed
