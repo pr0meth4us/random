@@ -10,13 +10,12 @@ def clean_filename(filename):
     return filename
 
 def download_video(search_query):
-    """Searches for a video and downloads its audio (M4A) and thumbnail image."""
+    """Searches for a video and downloads its audio, prioritizing direct M4A streams."""
     try:
-        # 1. Search for the top 5 videos matching the query
         ydl_opts_search = {
             'quiet': True,
             'no_warnings': True,
-            'extract_flat': True,  # Don't extract full info, just the list
+            'extract_flat': True,
         }
 
         print(f"Searching for: '{search_query}'...")
@@ -30,8 +29,7 @@ def download_video(search_query):
 
         videos = search_results['entries']
 
-        # 2. Display results and get user's choice
-        print(f"\n--- Youtube Results for '{search_query}' ---")
+        print(f"\n--- YouTube Results for '{search_query}' ---")
         for i, video in enumerate(videos):
             title = video.get('title', 'Unknown Title')
             uploader = video.get('uploader', 'Unknown Channel')
@@ -55,36 +53,34 @@ def download_video(search_query):
 
         print(f"\n⬇️ Downloading highest quality audio for: '{video_title}'")
 
-        # 3. Set up download options for highest quality M4A and thumbnail
         downloads_dir = "downloads"
         os.makedirs(downloads_dir, exist_ok=True)
         final_filepath = os.path.join(downloads_dir, f"{clean_title}.m4a")
 
         ydl_opts_download = {
-            'format': 'bestaudio/best',
+            'format': 'bestaudio[ext=m4a]/bestaudio/best',
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'm4a',       # Universal format
-                'preferredquality': '0',      # Best quality for m4a
+                'preferredcodec': 'm4a',
+                'preferredquality': '0',
             }, {
-                'key': 'EmbedThumbnail',      # Embed album art
+                'key': 'EmbedThumbnail',
             }, {
-                'key': 'FFmpegMetadata',      # Embed metadata
+                'key': 'FFmpegMetadata',
             }],
-            'writethumbnail': True,           # Save thumbnail as separate file
+            'writethumbnail': True,
             'outtmpl': os.path.join(downloads_dir, f'{clean_title}.%(ext)s'),
             'quiet': False,
             'no_warnings': True,
         }
 
-        # 4. Download the files
         with yt_dlp.YoutubeDL(ydl_opts_download) as ydl:
             ydl.download([video_url])
 
         print(f"\n✅ Successfully downloaded audio: {final_filepath}")
         print("🎨 Thumbnail embedded as album art!")
         print("🖼️ Thumbnail image also saved as a separate file!")
-        print("💡 M4A (AAC) provides excellent audio quality and is widely compatible!")
+        print("💡 Quality is preserved by avoiding re-encoding whenever possible.")
 
     except Exception as e:
         print(f"An error occurred while processing '{search_query}': {e}")
@@ -98,7 +94,6 @@ def main():
     print("📁 Files saved to 'downloads' folder")
     print()
 
-    # Check for yt-dlp dependency
     try:
         import yt_dlp
     except ImportError as e:
@@ -106,7 +101,6 @@ def main():
         print("   Please run: pip install yt-dlp")
         return
 
-    # Check for FFmpeg dependency
     try:
         subprocess.run(['ffmpeg', '-version'], capture_output=True, check=True, text=True)
         print("✅ FFmpeg detected - ready for high-quality conversion!")
@@ -119,13 +113,11 @@ def main():
     while True:
         try:
             search_input = input("Enter video title(s) (separate multiple with commas): ").strip()
-
             if not search_input:
                 print("Please enter a valid search query.")
                 continue
 
             search_queries = [query.strip() for query in search_input.split(',') if query.strip()]
-
             if not search_queries:
                 print("Please enter valid search queries.")
                 continue
@@ -138,15 +130,14 @@ def main():
             if another not in ['y', 'yes']:
                 print("\nThanks for using the downloader! 🎵")
                 break
-
         except KeyboardInterrupt:
             print("\n\nOperation cancelled by user.")
             break
         except Exception as e:
-            print(f"An unexpected error occurred in the main loop: {e}")
-            continue_choice = input("Continue with another download? (y/n): ").lower().strip()
-            if continue_choice not in ['y', 'yes']:
-                break
+            # This block is now simplified as requested
+            print(f"\nAn unexpected error occurred: {e}")
+            print("Restarting prompt...")
+            continue
 
 if __name__ == "__main__":
     main()

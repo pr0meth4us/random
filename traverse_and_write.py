@@ -17,7 +17,7 @@ class FileTraverser:
     # Default directories to exclude (common build/dependency folders)
     DEFAULT_EXCLUDE_DIRS = {
         # Python
-        '__pycache__', '.pytest_cache', 'venv', '.venv', 'env', '.env',
+        '__pycache__', '.pytest_cache', 'venv', '.venv', 'env', '.env', '_site',
         'site-packages', '.tox', 'build', 'dist', '*.egg-info',
 
         # Node.js
@@ -52,7 +52,7 @@ class FileTraverser:
     DEFAULT_EXCLUDE_EXTENSIONS = {
         # Compiled/Binary
         '.pyc', '.pyo', '.pyd', '.so', '.dll', '.dylib', '.exe', '.bin', '.o', '.obj',
-        '.class', '.jar', '.war', '.ear', '.jmod',
+        '.class', '.jar', '.war', '.ear', '.jmod','.pdf',
 
         # Source maps and compiled JS/CSS
         '.map', '.min.js', '.min.css',
@@ -107,7 +107,7 @@ class FileTraverser:
         'sw.js', 'workbox-*.js', 'precache-manifest.*.js', 'service-worker.js',
         '.env.local', '.env.development.local', '.env.test.local', '.env.production.local',
         'cypress.json', 'jest.config.js', 'jest.config.ts', 'vitest.config.js',
-        'playwright.config.js', 'playwright.config.ts',
+        'playwright.config.js', 'playwright.config.ts', 'movies.yml', 'watchlog.yml', 'leaderboard.yml',
 
         # Java/Spring Boot specific files
         '.env', 'application.properties', 'application.yml', 'application.yaml',
