@@ -1,14 +1,14 @@
 import os
 import sys
-
 try:
     from bs4 import BeautifulSoup
 except ImportError:
     print("Error: Please run 'pip install beautifulsoup4' first.")
     exit()
 
+# File naming matching your hybrid output
 INPUT_FILE = "hybrid_chat.html"
-OUTPUT_FILE = "searchable_hybrid_chat14.html"
+OUTPUT_FILE = "searchable_hybrid_chat45.html"
 
 if not os.path.exists(INPUT_FILE):
     print(f"Error: Could not find '{INPUT_FILE}' in the current directory.")
@@ -18,177 +18,149 @@ print("1. Loading HTML file...")
 with open(INPUT_FILE, 'r', encoding='utf-8') as f:
     soup = BeautifulSoup(f, 'html.parser')
 
-print("2. Injecting Search Styles...")
+print("2. Injecting Improved Styles...")
 style_tag = soup.find('style')
 if style_tag:
+    # Overriding the body's flex behavior and fixing the padding
+    # We use !important to make sure we kill the old 'display: flex' that's ruining the layout
     style_tag.append("""
-    /* ── Reset body/html so nothing squishes ── */
-    html, body {
-        margin: 0;
-        padding: 0;
-        width: 100%;
-        box-sizing: border-box;
+    body { 
+        display: block !important; 
+        padding: 0 !important; 
+        margin: 0 !important; 
+        background-color: #f0f2f5;
     }
-
-    /* ── Sticky full-width search bar ── */
-    #custom-search-container {
-        position: sticky;
-        top: 0;
-        z-index: 1000;
+    
+    #custom-search-container { 
+        padding: 12px 20px; 
+        background: rgba(240, 242, 245, 0.95); 
+        backdrop-filter: blur(10px);
+        border-bottom: 1px solid #ddd; 
+        position: sticky; 
+        top: 0; 
+        z-index: 1000; 
         width: 100%;
-        box-sizing: border-box;
-        background: #f0f2f5;
-        border-bottom: 1px solid #ddd;
-        padding: 12px 20px;
         display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 6px;
+        justify-content: center;
+        box-sizing: border-box;
     }
 
-    #chat-search {
-        width: 100%;
-        max-width: 900px;
-        padding: 12px 16px;
-        border: 1px solid #ccc;
-        border-radius: 22px;
-        font-size: 15px;
+    #chat-search { 
+        width: 100%; 
+        max-width: 700px;
+        padding: 12px 16px; 
+        border: 1px solid #ccc; 
+        border-radius: 12px; 
+        font-size: 16px; 
         outline: none;
-        background: #fff;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.08);
-        box-sizing: border-box;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        background: white;
     }
 
-    #search-count {
-        font-size: 13px;
-        color: #888;
-        display: none;
-    }
-
-    /* ── Make the visible chat fill the page properly ── */
+    /* Centering the visible chat area and giving it the padding it needs */
     #visible-chat {
-        width: 100%;
-        max-width: 900px;
-        margin: 0 auto;
-        padding: 20px 24px;
+        margin: 20px auto; 
+        padding: 0 15px; /* Outside padding so text isn't squeezed against edges */
         box-sizing: border-box;
     }
 
-    /* ── Individual message breathing room ── */
-    .message {
-        margin-bottom: 6px;
-        content-visibility: auto;
-        contain-intrinsic-size: 0 80px;
+    .message { 
+        content-visibility: auto; 
+        contain-intrinsic-size: 0 80px; 
+        margin-bottom: 10px;
     }
-
-    /* ── No-results notice ── */
-    #no-results {
-        text-align: center;
-        color: #999;
-        padding: 40px 0;
-        font-size: 15px;
+    
+    @media (max-width: 700px) {
+        #chat-search { width: 100%; }
+        #visible-chat { width: 100%; padding: 0 10px; }
     }
     """)
 
-print("3. Re-structuring for Search (Targeting .chat-container)...")
+print("3. Re-structuring for Search...")
 chat_container = soup.find('div', class_='chat-container')
 
 if chat_container:
-    # 1. Build search bar
+    # 1. Add Search Bar at the very top of body
     search_container = soup.new_tag('div', id='custom-search-container')
-    search_input = soup.new_tag(
-        'input', type='text', id='chat-search',
-        placeholder='Search messages...'
-    )
-    search_count = soup.new_tag('span', id='search-count')
+    search_input = soup.new_tag('input', type='text', id='chat-search',
+                                placeholder='Search messages...')
     search_container.append(search_input)
-    search_container.append(search_count)
     soup.body.insert(0, search_container)
 
-    # 2. Visible display area — inherits chat-container styles but gets our id too
+    # 2. Create the Centered Display Area
     new_visible_area = soup.new_tag('div', id='visible-chat')
+    # We keep the original class so bubbles still look like iOS
     new_visible_area['class'] = 'chat-container'
     chat_container.insert_before(new_visible_area)
 
-    # 3. Hide original messages in a <template>
+    # 3. Move messages into the hidden template
     chat_container.name = 'template'
     chat_container.attrs = {'id': 'message-data'}
 else:
-    print("❌ Error: Could not find <div class='chat-container'>. Check your hybrid_chat.html structure.")
+    print("❌ Error: Could not find <div class='chat-container'>.")
     exit()
 
-print("4. Injecting Search Logic...")
+print("4. Injecting Optimized Search Logic...")
 script = soup.new_tag('script')
 script.string = """
-document.addEventListener("DOMContentLoaded", function () {
-    const template    = document.getElementById('message-data');
+document.addEventListener("DOMContentLoaded", function() {
+    const template = document.getElementById('message-data');
     const chatDisplay = document.getElementById('visible-chat');
     const searchInput = document.getElementById('chat-search');
-    const searchCount = document.getElementById('search-count');
-
+    
     if (!template || !chatDisplay) return;
-
-    const messages  = Array.from(template.content.querySelectorAll('.message'));
+    
+    const messages = Array.from(template.content.querySelectorAll('.message'));
     let currentIndex = 0;
-    const BATCH      = 100;
-    let isSearching  = false;
+    const batchSize = 100; 
+    let isSearching = false;
 
-    /* ── Show total message count in placeholder ── */
-    searchInput.placeholder = `Search ${messages.length.toLocaleString()} messages...`;
-
-    function loadBatch() {
+    function loadMore() {
         if (isSearching || currentIndex >= messages.length) return;
-        const frag = document.createDocumentFragment();
-        const end  = Math.min(currentIndex + BATCH, messages.length);
+        const fragment = document.createDocumentFragment();
+        const end = Math.min(currentIndex + batchSize, messages.length);
         for (let i = currentIndex; i < end; i++) {
-            frag.appendChild(messages[i].cloneNode(true));
+            fragment.appendChild(messages[i].cloneNode(true));
         }
-        chatDisplay.appendChild(frag);
+        chatDisplay.appendChild(fragment);
         currentIndex = end;
     }
 
-    loadBatch();
+    loadMore();
 
     window.addEventListener('scroll', () => {
-        if (!isSearching &&
-            window.innerHeight + window.scrollY >= document.body.offsetHeight - 1000) {
-            loadBatch();
+        if (!isSearching && (window.innerHeight + window.scrollY) >= document.body.offsetHeight - 1200) {
+            loadMore();
         }
     });
 
     searchInput.addEventListener('input', (e) => {
         const query = e.target.value.toLowerCase().trim();
         chatDisplay.innerHTML = '';
-
+        
         if (query === '') {
-            isSearching  = false;
+            isSearching = false;
             currentIndex = 0;
-            searchCount.style.display = 'none';
-            loadBatch();
+            loadMore();
             return;
         }
 
         isSearching = true;
-        const frag  = document.createDocumentFragment();
-        const MAX   = 1000;
-        let   count = 0;
+        const fragment = document.createDocumentFragment();
+        let matchCount = 0;
 
         for (let i = 0; i < messages.length; i++) {
             if (messages[i].textContent.toLowerCase().includes(query)) {
-                frag.appendChild(messages[i].cloneNode(true));
-                if (++count >= MAX) break;
+                fragment.appendChild(messages[i].cloneNode(true));
+                matchCount++;
+                if (matchCount >= 500) break; // Limit search results for speed
             }
         }
-
-        if (count === 0) {
-            chatDisplay.innerHTML = '<div id="no-results">No messages found.</div>';
-            searchCount.style.display = 'none';
+        
+        if (matchCount === 0) {
+            chatDisplay.innerHTML = '<div style="padding: 40px; text-align: center; color: #888;">No results found.</div>';
         } else {
-            chatDisplay.appendChild(frag);
-            searchCount.textContent   = count >= MAX
-                ? `Showing first ${MAX} of many results`
-                : `${count} result${count !== 1 ? 's' : ''}`;
-            searchCount.style.display = 'block';
+            chatDisplay.appendChild(fragment);
         }
     });
 });
@@ -199,5 +171,4 @@ print(f"5. Saving to {OUTPUT_FILE}...")
 with open(OUTPUT_FILE, 'w', encoding='utf-8') as f:
     f.write(str(soup))
 
-msg_count = len(chat_container.find_all(class_='message')) if chat_container else 0
-print(f"✅ Done! Messages indexed: {msg_count}")
+print(f"✅ Fixed! Header is sticky/full-width and chat bubbles have proper padding.")
