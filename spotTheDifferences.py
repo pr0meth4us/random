@@ -21,14 +21,23 @@ Automatic spot-the-difference detector with bulletproof 3-stage alignment.
             • Only applied if it strictly improves SSIM
 
 ── Detection pipeline ──────────────────────────────────────────────────────
-  SSIM difference map → Otsu threshold → morphological cleanup
-  → border mask → contour detection → colour-delta scoring
-  → auto gap-threshold → contour grouping/merging → red circles on output
+  SSIM difference map + CIE-Lab ΔE colour map (fused) → Otsu threshold
+  → morphological cleanup → border mask → contour detection
+  → colour-delta scoring → auto gap-threshold → contour grouping/merging
+  → coloured circles on output
+
+── Output ──────────────────────────────────────────────────────────────────
+  Single combined image  → stacked layout preserved, circles on both panels,
+                           Khmer caption banner at top.
+  Two separate images    → side-by-side layout, Khmer caption banner at top.
+  One random vivid colour chosen per run; numbered badge on every circle.
 
 Usage:
   python spot_the_difference.py puzzle.jpg
   python spot_the_difference.py original.png modified.png
   python spot_the_difference.py puzzle.jpg --output result.png
+  python spot_the_difference.py puzzle.jpg --ecc      (ECC refinement, slower)
+  python spot_the_difference.py puzzle.jpg --no-align (skip alignment)
 
 Install once:
   pip install opencv-python scikit-image numpy pillow
@@ -37,10 +46,12 @@ Install once:
 import sys
 import argparse
 import warnings
+import random
+import os
 import cv2
 import numpy as np
 from skimage.metrics import structural_similarity as ssim
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 
 warnings.filterwarnings("ignore")
 
@@ -54,6 +65,94 @@ SAME_RATIO_TOL = 0.03  # treat aspect ratios within 3% as "same"
 ECC_MAX_DIM    = 400   # ECC runs on a thumbnail — smaller = faster
 ECC_MAX_ITER   = 150   # usually converges in <50 iters if it's going to work
 ECC_EPS        = 1e-5
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  FONTS  (for output annotation)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Known Khmer font paths across Linux / Windows / macOS ────────────────────
+#
+# IMPORTANT — why only Noto Khmer fonts are included here:
+#   KhmerOS fonts use a legacy glyph-mapping encoding system, NOT Unicode
+#   OpenType.  When PIL feeds them Unicode codepoints, the glyphs come out
+#   scrambled ("ឃើ" → "យ៉ី" etc.).  Only fonts with proper Unicode OpenType
+#   Khmer GSUB/GPOS tables render correctly; on a standard system those are
+#   the Noto Khmer family.
+#
+# Linux:   sudo apt install fonts-noto-core
+# Windows: https://fonts.google.com/noto/specimen/Noto+Sans+Khmer  → Install
+# macOS:   brew install font-noto-sans-khmer  (tap homebrew/cask-fonts first)
+_KHMER_FONT_CANDIDATES = [
+    # ── Linux: Noto ───────────────────────────────────────────────────────────
+    "/usr/share/fonts/truetype/noto/NotoSansKhmer-Bold.ttf",
+    "/usr/share/fonts/truetype/noto/NotoSerifKhmer-Bold.ttf",
+    "/usr/share/fonts/truetype/noto/NotoSansKhmer-Regular.ttf",
+    "/usr/share/fonts/truetype/noto/NotoSerifKhmer-Regular.ttf",
+    # ── Windows ───────────────────────────────────────────────────────────────
+    "C:/Windows/Fonts/NotoSansKhmer-Bold.ttf",
+    "C:/Windows/Fonts/NotoSansKhmer-Regular.ttf",
+    "C:/Windows/Fonts/NotoSerifKhmer-Bold.ttf",
+    "C:/Windows/Fonts/NotoSerifKhmer-Regular.ttf",
+    # ── macOS ─────────────────────────────────────────────────────────────────
+    "/Library/Fonts/NotoSansKhmer-Bold.ttf",
+    "/Library/Fonts/NotoSansKhmer-Regular.ttf",
+    "/Library/Fonts/NotoSerifKhmer-Bold.ttf",
+    "/Library/Fonts/NotoSerifKhmer-Regular.ttf",
+    os.path.expanduser("~/Library/Fonts/NotoSansKhmer-Bold.ttf"),
+    os.path.expanduser("~/Library/Fonts/NotoSansKhmer-Regular.ttf"),
+    # ── Homebrew / user-local ─────────────────────────────────────────────────
+    "/usr/local/share/fonts/NotoSansKhmer-Bold.ttf",
+    os.path.expanduser("~/.fonts/NotoSansKhmer-Bold.ttf"),
+    os.path.expanduser("~/.local/share/fonts/NotoSansKhmer-Bold.ttf"),
+    os.path.expanduser("~/.fonts/NotoSerifKhmer-Bold.ttf"),
+    os.path.expanduser("~/.local/share/fonts/NotoSerifKhmer-Bold.ttf"),
+]
+
+# Build the list of fonts that actually exist on this machine
+_AVAILABLE_KHMER_FONTS = [p for p in _KHMER_FONT_CANDIDATES if os.path.exists(p)]
+
+if not _AVAILABLE_KHMER_FONTS:
+    print(
+        "[WARN] No Khmer fonts found.  Khmer text will fall back to the default font.\n"
+        "       To fix, install fonts:\n"
+        "         Linux : sudo apt install fonts-noto-core fonts-khmeros fonts-sil-mondulkiri\n"
+        "         Windows : download from https://fonts.google.com/noto/specimen/Noto+Sans+Khmer\n"
+        "         macOS : brew install font-noto-sans-khmer  (requires homebrew-cask-fonts)"
+    )
+
+_LATIN_FONT = next((p for p in [
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "C:/Windows/Fonts/arialbd.ttf",
+    "C:/Windows/Fonts/Arial.ttf",
+    "/Library/Fonts/Arial Bold.ttf",
+] if os.path.exists(p)), None)
+
+
+def pick_random_khmer_font(size: int):
+    """
+    Pick one Khmer font at random from all fonts found on this machine.
+    Validates with the full range of Khmer characters used in the output
+    (including Khmer digits ០-៩) — some fonts handle basic glyphs but
+    crash on digit codepoints.  Skips any font that raises an error.
+    Returns (ImageFont, path_str).  Falls back to PIL default if nothing works.
+    """
+    import PIL.Image as _PILImg, PIL.ImageDraw as _PILDraw
+    # Use all character types that appear in the output
+    test_text = "រកឃើញភាពខុសគ្នា ០១២៣៤៥៦៧៨៩ កន្លែង ចម្លើយពីក្មួយ និរន្ត"
+    candidates = list(_AVAILABLE_KHMER_FONTS)  # copy so we can shuffle
+    random.shuffle(candidates)
+    for path in candidates:
+        try:
+            f   = ImageFont.truetype(path, size)
+            _d  = _PILDraw.Draw(_PILImg.new("RGB", (800, 100)))
+            _d.textbbox((0, 0), test_text, font=f)
+            _d.text((0, 0), test_text, font=f, fill=(0, 0, 0))  # also test actual render
+            return f, path
+        except Exception:
+            continue
+    return ImageFont.load_default(), "default"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -95,8 +194,11 @@ def _find_separator(profile: np.ndarray, axis_len: int) -> int | None:
     local_mean = float(region.mean())
 
     # Only trust the separator if the peak is meaningfully brighter than average
-    # (i.e. there actually IS a lighter gap between two content regions)
-    if local_max - local_mean < 15:
+    # (i.e. there actually IS a lighter gap between two content regions).
+    # Threshold lowered to 5: text rows inside the gap band reduce the smoothed
+    # peak, so the original 15 was too strict for puzzles like Afrika where
+    # "Im unteren Bild sind 10 Fehler" sits inside the white separator.
+    if local_max - local_mean < 5:
         return None
 
     sep_centre = lo + int(np.argmax(region))
@@ -120,6 +222,13 @@ def auto_slice(img: np.ndarray):
 
     The header ("FIND THE 5 DIFFERENCES" etc.) is automatically ignored because
     it sits in the top 20% of the image, outside the 20-80% search window.
+
+    Returns
+    -------
+    a        : top/left panel  (BGR)
+    b        : bottom/right panel  (BGR), same size as a
+    a_start  : pixel offset of panel-a's top-left corner in the combined image
+    b_start  : pixel offset of panel-b's top-left corner in the combined image
     """
     h, w = img.shape[:2]
     portrait = h > w
@@ -134,6 +243,7 @@ def auto_slice(img: np.ndarray):
             half = h // 2
             a, b = img[:half], img[h - half:]
             print("[INFO] No separator found — falling back to h//2 cut")
+            sep = half
     else:
         gray    = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         profile = gray.mean(axis=0)          # one brightness value per column
@@ -144,17 +254,23 @@ def auto_slice(img: np.ndarray):
             half = w // 2
             a, b = img[:, :half], img[:, w - half:]
             print("[INFO] No separator found — falling back to w//2 cut")
+            sep = half
 
     # Make sure both halves are the same size (crop the larger to match)
     if portrait:
-        min_h = min(a.shape[0], b.shape[0])
-        a, b  = a[-min_h:], b[:min_h]       # keep bottom of A and top of B
+        min_h   = min(a.shape[0], b.shape[0])
+        a_start = sep - min_h   # where panel-a begins in combined-image coords
+        b_start = sep           # where panel-b begins in combined-image coords
+        a, b    = a[-min_h:], b[:min_h]   # keep bottom of A and top of B
     else:
-        min_w = min(a.shape[1], b.shape[1])
-        a, b  = a[:, -min_w:], b[:, :min_w]
+        min_w   = min(a.shape[1], b.shape[1])
+        a_start = sep - min_w
+        b_start = sep
+        a, b    = a[:, -min_w:], b[:, :min_w]
 
-    print(f"[INFO] Auto-sliced → A{a.shape[:2]}  B{b.shape[:2]}")
-    return a, b
+    print(f"[INFO] Auto-sliced → A{a.shape[:2]}  B{b.shape[:2]}  "
+          f"a_start={a_start}  b_start={b_start}")
+    return a, b, a_start, b_start
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -396,21 +512,53 @@ def _auto_threshold(deltas: list, floor: float):
     return floor, f"no dominant gap — keeping all above floor {floor:.1f}"
 
 
+def _lab_delta_map(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """
+    Per-pixel CIE-Lab Euclidean distance (ΔE), scaled to 0-255.
+
+    Why this matters: SSIM operates on greyscale luminance and completely
+    ignores hue/saturation changes.  A red object swapped for a green one
+    at the same brightness will score near-zero on SSIM but very high here.
+    Fusing both maps catches every category of difference.
+    """
+    la    = cv2.cvtColor(a, cv2.COLOR_BGR2LAB).astype(np.float32)
+    lb    = cv2.cvtColor(b, cv2.COLOR_BGR2LAB).astype(np.float32)
+    delta = np.sqrt(np.sum((la - lb) ** 2, axis=2))
+    mx    = delta.max()
+    return (delta / mx * 255).astype(np.uint8) if mx > 0 else delta.astype(np.uint8)
+
+
 def detect(img_a: np.ndarray,
            img_b: np.ndarray,
            min_area:    int   = 50,
            delta_floor: float = 8.0):
-    """Detect and circle all real differences between two aligned images."""
+    """
+    Detect all real differences between two aligned images.
+
+    Returns
+    -------
+    circles : list of (cx, cy, radius) in img_a coordinate space
+    count   : number of differences found
+    """
     h, w  = img_a.shape[:2]
     img_b = cv2.resize(img_b, (w, h), interpolation=cv2.INTER_LANCZOS4)
 
-    # ── SSIM difference map ───────────────────────────────────────────────────
+    # ── SSIM structural difference map ───────────────────────────────────────
     score, diff = ssim(_gray(img_a), _gray(img_b), full=True)
     print(f"[INFO] SSIM for detection    : {score:.4f}")
 
     diff_u8  = (diff * 255).clip(0, 255).astype(np.uint8)
     inv      = cv2.bitwise_not(diff_u8)
-    _, thresh = cv2.threshold(inv, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+
+    # ── CIE-Lab colour difference map ────────────────────────────────────────
+    # Catches colour-only swaps that SSIM misses (same luminance, different hue).
+    lab_diff = _lab_delta_map(img_a, img_b)
+
+    # ── Fuse: take pixel-wise maximum of both maps ────────────────────────────
+    # Any region that differs structurally OR in colour will be flagged.
+    fused = np.maximum(inv, lab_diff)
+
+    _, thresh = cv2.threshold(fused, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
 
     # Morphological cleanup: merge nearby fragments, kill isolated specks
     k9 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9,9))
@@ -439,7 +587,7 @@ def detect(img_a: np.ndarray,
 
     if not candidates:
         print("[WARN] No candidates survived filtering.")
-        return img_b.copy(), 0
+        return [], 0
 
     deltas = sorted(d for _, d in candidates)
     print(f"[INFO] Candidates : {len(candidates)}  "
@@ -448,7 +596,7 @@ def detect(img_a: np.ndarray,
     threshold, reason = _auto_threshold(deltas, delta_floor)
     print(f"[INFO] Δ-threshold : {threshold:.1f}  ({reason})")
 
-    # ── Merge nearby contours, then draw one circle per group ─────────────────
+    # ── Merge nearby contours, then build one circle per group ────────────────
     #
     # SSIM often splits a single visual difference (e.g. one added animal) into
     # several nearby contour fragments.  Drawing a separate circle per fragment
@@ -465,11 +613,6 @@ def detect(img_a: np.ndarray,
     surviving = [(cnt, delta) for cnt, delta in candidates if delta >= threshold]
 
     # Each group entry: [sub_circles [(cx,cy,r),...], max_delta, centre_x, centre_y]
-    #
-    # Store per-contour (centre, radius) rather than raw points.
-    # When drawing, we fit a circle around sub-circle centres then expand by
-    # the largest sub-radius — tight enough to cover every fragment without
-    # being inflated by individual distant edge points on large contours.
     groups: list = []
     for cnt, delta in surviving:
         (cx, cy), r = cv2.minEnclosingCircle(cnt)
@@ -489,7 +632,7 @@ def detect(img_a: np.ndarray,
 
     print(f"[INFO] After merging: {len(groups)} groups  (was {len(surviving)} contours)")
 
-    result = img_b.copy()
+    circles = []
     for grp in groups:
         sub = grp[0]
         centres = np.array([[s[0], s[1]] for s in sub], dtype=np.float32)
@@ -500,9 +643,9 @@ def detect(img_a: np.ndarray,
         else:
             (cx, cy), span = cv2.minEnclosingCircle(centres.reshape(-1, 1, 2))
             r = max(int(span + max_sub_r) + 12, 18)
-        cv2.circle(result, (int(cx), int(cy)), r, (0, 0, 255), 3)
+        circles.append((int(cx), int(cy), r))
 
-    return result, len(groups)
+    return circles, len(groups)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -536,13 +679,22 @@ def detect_line(img_a: np.ndarray, img_b: np.ndarray) -> tuple:
       • Tiny morph kernel (3px) — don't bridge small but distinct differences.
       • NMS (non-maximum suppression, 80px) — merges overlapping circles.
       • delta_floor=5 — ink changes are subtle in greyscale.
+
+    Returns
+    -------
+    circles : list of (cx, cy, radius)
+    count   : number of differences found
     """
     LINE_SSIM_THRESH  = 30
     LINE_MORPH_KSIZE  = 3
     LINE_MIN_AREA     = 20
     LINE_DELTA_FLOOR  = 5.0
-    LINE_MAX_DIFF_MIN = 160   # reject anything whose peak diff is below this
-    LINE_NMS_RADIUS   = 80    # merge circles whose centres are within this px
+    # LINE_MAX_DIFF_MIN: JPEG compression on small images soft-clips peaks.
+    # Scale with image size: larger=sharper peaks, smaller=softer.
+    LINE_MAX_DIFF_MIN = max(80, int(min(img_a.shape[:2]) * 0.45))
+    # LINE_NMS_RADIUS: 80px on a 233px panel = 34% of image — way too big.
+    # Scale to ~12% of the shorter panel edge.
+    LINE_NMS_RADIUS = max(20, int(min(img_a.shape[:2]) * 0.12))
 
     h, w  = img_a.shape[:2]
     img_b = cv2.resize(img_b, (w, h), interpolation=cv2.INTER_LANCZOS4)
@@ -589,7 +741,12 @@ def detect_line(img_a: np.ndarray, img_b: np.ndarray) -> tuple:
             print(f"       skip ({cx:4d},{cy:4d}) peak={peak:.0f} < {LINE_MAX_DIFF_MIN}  (warp artifact)")
             continue
 
-        candidates.append((cx, cy, max(r + 15, 20), delta))
+        # Cap radius: individual line-drawing differences are small features.
+        # A contour enclosing a large alignment-residual blob would otherwise
+        # produce a circle spanning half the image.  15% of the shorter panel
+        # edge is enough to comfortably surround any real single difference.
+        max_r = int(min(h, w) * 0.15)
+        candidates.append((cx, cy, min(max(r + 15, 20), max_r), delta))
 
     print(f"[INFO] Candidates after peak-diff filter: {len(candidates)}")
 
@@ -603,15 +760,207 @@ def detect_line(img_a: np.ndarray, img_b: np.ndarray) -> tuple:
 
     print(f"[INFO] After NMS: {len(kept)} circles")
 
-    result = img_b.copy()
-    for cx, cy, r, _ in kept:
-        cv2.circle(result, (cx, cy), r, (0, 0, 255), 2)
-
-    return result, len(kept)
+    circles = [(cx, cy, r) for cx, cy, r, _ in kept]
+    return circles, len(kept)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  4.  CLI
+#  4.  OUTPUT — colour, badges, Khmer caption
+# ─────────────────────────────────────────────────────────────────────────────
+
+def random_run_color() -> tuple:
+    """
+    Pick ONE random vivid colour for this entire run.
+    Generated in HSV space: saturation ≥ 0.80, value ≥ 0.80.
+    Guarantees the result is never black, white, or grey.
+    Returns (R, G, B).
+    """
+    h = random.uniform(0, 360)
+    s = random.uniform(0.80, 1.00)
+    v = random.uniform(0.80, 1.00)
+    c = v * s
+    x = c * (1 - abs((h / 60) % 2 - 1))
+    m = v - c
+    r, g, b = [(c, x, 0), (x, c, 0), (0, c, x),
+               (0, x, c), (x, 0, c), (c, 0, x)][int(h // 60) % 6]
+    return (int((r + m) * 255), int((g + m) * 255), int((b + m) * 255))
+
+
+def _load_font(path, size):
+    if path:
+        try:
+            return ImageFont.truetype(path, size)
+        except Exception:
+            pass
+    return ImageFont.load_default()
+
+
+def draw_circles_on_panel(panel_pil: Image.Image,
+                           circles:   list,
+                           color:     tuple) -> Image.Image:
+    """
+    Draw one perfect circle + numbered badge per difference onto panel_pil.
+    Coordinates must be in panel_pil's own pixel space (no offset needed).
+    Returns a new annotated copy.
+    """
+    img   = panel_pil.copy()
+    draw  = ImageDraw.Draw(img)
+    bfont = _load_font(_LATIN_FONT, 24)
+
+    for idx, (cx, cy, r) in enumerate(circles):
+        # Plain coloured ring — no white halo, clean look
+        draw.ellipse([cx - r, cy - r, cx + r, cy + r], outline=color, width=4)
+
+        # Numbered badge: filled disc + white number
+        br    = 15
+        bx    = cx + int(r * 0.70)
+        by    = cy - int(r * 0.70)
+        draw.ellipse([bx - br, by - br, bx + br, by + br], fill=color)
+        label = str(idx + 1)
+        bb    = draw.textbbox((0, 0), label, font=bfont)
+        tw, th = bb[2] - bb[0], bb[3] - bb[1]
+        draw.text((bx - tw // 2 - bb[0], by - th // 2 - bb[1]),
+                  label, font=bfont, fill=(255, 255, 255))
+
+    return img
+
+
+def _khmer_digits(n: int) -> str:
+    return str(n).translate(str.maketrans("0123456789", "០១២៣៤៥៦៧៨៩"))
+
+
+def make_khmer_banner(width: int, count: int) -> Image.Image:
+    """Dark banner with gold Khmer text: 'Found X differences'."""
+    BH    = 80
+    text  = f"រកឃើញភាពខុសគ្នា {_khmer_digits(count)} កន្លែង"
+    banner = Image.new("RGB", (width, BH), (30, 30, 50))
+    draw   = ImageDraw.Draw(banner)
+    kfont, kfont_path = pick_random_khmer_font(40)
+    print(f"[INFO] Khmer banner font : {os.path.basename(kfont_path)}")
+    bb     = draw.textbbox((0, 0), text, font=kfont)
+    tw, th = bb[2] - bb[0], bb[3] - bb[1]
+    tx     = (width - tw) // 2 - bb[0]
+    ty     = (BH    - th) // 2 - bb[1]
+    draw.text((tx + 2, ty + 2), text, font=kfont, fill=(10, 10, 20))   # shadow
+    draw.text((tx,     ty    ), text, font=kfont, fill=(255, 215, 60))  # gold
+    return banner
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  5.  OUTPUT BUILDERS
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def add_watermark(img: Image.Image) -> Image.Image:
+    """
+    Stamp a semi-transparent diagonal Khmer watermark across the image.
+    Text: ចម្លើយពីក្មួយ និរន្ត  ("Answer from Nephew Nirant")
+    """
+    text  = "ចម្លើយពីក្មួយ និរន្ត"
+    w, h  = img.size
+
+    # Build the watermark on a transparent canvas the same size as the image
+    wm    = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    draw  = ImageDraw.Draw(wm)
+
+    # Pick font size proportional to image width
+    font_size = max(24, w // 18)
+    font, _ = pick_random_khmer_font(font_size)
+
+    bb   = draw.textbbox((0, 0), text, font=font)
+    tw   = bb[2] - bb[0]
+    th   = bb[3] - bb[1]
+
+    # Tile the text diagonally across the whole image
+    step_x = int(tw * 1.6)
+    step_y = int(th * 3.5)
+    angle  = -30
+
+    for row, y0 in enumerate(range(-th * 2, h + th * 2, step_y)):
+        x_shift = (row % 2) * (step_x // 2)          # stagger every other row
+        for x0 in range(-tw - x_shift, w + tw, step_x):
+            # Render each instance of the text onto a tiny tile, then rotate and paste
+            tile = Image.new("RGBA", (tw + 20, th + 20), (0, 0, 0, 0))
+            tdraw = ImageDraw.Draw(tile)
+            # White outline for legibility on any background
+            for dx, dy in [(-1,-1),(1,-1),(-1,1),(1,1)]:
+                tdraw.text((10 - bb[0] + dx, 10 - bb[1] + dy),
+                           text, font=font, fill=(255, 255, 255, 60))
+            tdraw.text((10 - bb[0], 10 - bb[1]),
+                       text, font=font, fill=(180, 180, 180, 55))
+            rotated = tile.rotate(angle, expand=True)
+            wm.paste(rotated, (x0, y0), rotated)
+
+    # Composite watermark over original
+    out = img.convert("RGBA")
+    out = Image.alpha_composite(out, wm)
+    return out.convert("RGB")
+
+
+def build_stacked_output(combined_bgr:  np.ndarray,
+                          img_a:         np.ndarray,
+                          img_b_aligned: np.ndarray,
+                          circles:       list,
+                          a_start:       int,
+                          b_start:       int,
+                          color:         tuple,
+                          count:         int) -> Image.Image:
+    """
+    Reconstruct the original stacked combined image with annotated panels.
+
+    WHY WE ANNOTATE PANELS SEPARATELY:
+      Circles live in img_a coordinate space.  img_b_aligned was warped to
+      match img_a, so the same (cx, cy) positions are valid on img_b_aligned.
+      If we instead tried to draw circles into the ORIGINAL combined image at
+      (cx, cy + b_start), the bottom panel circles would be wrong — the original
+      img_b was never warped, so its content is shifted relative to img_a.
+
+      Solution: annotate each panel in its own coordinate space, then paste at
+      the correct offset.  Circles are guaranteed to land on the right pixels.
+    """
+    BH = 80
+    oh, ow = combined_bgr.shape[:2]
+
+    pil_a = Image.fromarray(cv2.cvtColor(img_a,         cv2.COLOR_BGR2RGB))
+    pil_b = Image.fromarray(cv2.cvtColor(img_b_aligned, cv2.COLOR_BGR2RGB))
+    pil_a = draw_circles_on_panel(pil_a, circles, color)
+    pil_b = draw_circles_on_panel(pil_b, circles, color)
+
+    # Start from the original combined image — preserves headers, borders, etc.
+    base   = Image.fromarray(cv2.cvtColor(combined_bgr, cv2.COLOR_BGR2RGB))
+    canvas = Image.new("RGB", (ow, BH + oh), (30, 30, 50))
+    canvas.paste(base,  (0, BH))
+    canvas.paste(pil_a, (0, BH + a_start))   # overwrite top panel
+    canvas.paste(pil_b, (0, BH + b_start))   # overwrite bottom panel (aligned)
+    canvas.paste(make_khmer_banner(ow, count), (0, 0))
+    return canvas
+
+
+def build_sidebyside_output(img_a:         np.ndarray,
+                             img_b_aligned: np.ndarray,
+                             circles:       list,
+                             color:         tuple,
+                             count:         int) -> Image.Image:
+    """Two separate images: annotate both panels and place side by side."""
+    BH, GAP = 80, 6
+    h, w    = img_a.shape[:2]
+
+    pil_a = Image.fromarray(cv2.cvtColor(img_a,         cv2.COLOR_BGR2RGB))
+    pil_b = Image.fromarray(cv2.cvtColor(img_b_aligned, cv2.COLOR_BGR2RGB))
+    pil_a = draw_circles_on_panel(pil_a, circles, color)
+    pil_b = draw_circles_on_panel(pil_b, circles, color)
+
+    total_w = w * 2 + GAP
+    canvas  = Image.new("RGB", (total_w, BH + h), (30, 30, 50))
+    canvas.paste(pil_a, (0,       BH))
+    canvas.paste(pil_b, (w + GAP, BH))
+    ImageDraw.Draw(canvas).rectangle([w, BH, w + GAP, BH + h], fill=(180, 180, 180))
+    canvas.paste(make_khmer_banner(total_w, count), (0, 0))
+    return canvas
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  6.  CLI
 # ─────────────────────────────────────────────────────────────────────────────
 
 def parse_args():
@@ -645,7 +994,7 @@ Examples:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  5.  MAIN
+#  7.  MAIN
 # ─────────────────────────────────────────────────────────────────────────────
 
 def main():
@@ -654,22 +1003,26 @@ def main():
     if len(args.images) == 1:
         print(f"[INFO] Single image → auto-slicing: {args.images[0]!r}")
         combined = load_bgr(args.images[0])
-        img_a, img_b = auto_slice(combined)
+        img_a, img_b, a_start, b_start = auto_slice(combined)
+        two_image_mode = False
     elif len(args.images) == 2:
         print(f"[INFO] Two images: {args.images[0]!r}  vs  {args.images[1]!r}")
-        img_a = load_bgr(args.images[0])
-        img_b = load_bgr(args.images[1])
+        combined       = None
+        a_start        = b_start = 0
+        img_a          = load_bgr(args.images[0])
+        img_b          = load_bgr(args.images[1])
+        two_image_mode = True
     else:
         sys.exit("[ERROR] Provide 1 combined image or 2 separate images.")
 
     print(f"[INFO] A: {img_a.shape[:2]}   B: {img_b.shape[:2]}")
 
     if args.no_align:
-        img_b = cv2.resize(img_b, (img_a.shape[1], img_a.shape[0]),
-                           interpolation=cv2.INTER_LANCZOS4)
+        img_b_aligned = cv2.resize(img_b, (img_a.shape[1], img_a.shape[0]),
+                                   interpolation=cv2.INTER_LANCZOS4)
         print("[INFO] Alignment skipped (--no-align)")
     else:
-        img_b = align(img_a, img_b, skip_ecc=not args.ecc)
+        img_b_aligned = align(img_a, img_b, skip_ecc=not args.ecc)
 
     # Mode selection
     if args.mode == "auto":
@@ -679,18 +1032,31 @@ def main():
         print(f"[INFO] Mode forced: {'line-drawing' if line_mode else 'colour'}")
 
     if line_mode:
-        result, count = detect_line(img_a, img_b)
+        circles, count = detect_line(img_a, img_b_aligned)
     else:
-        result, count = detect(img_a, img_b,
-                               min_area=args.min_area,
-                               delta_floor=args.delta_floor)
+        circles, count = detect(img_a, img_b_aligned,
+                                min_area=args.min_area,
+                                delta_floor=args.delta_floor)
 
-    cv2.imwrite(args.output, result)
+    # One random vivid colour for all circles this run
+    color = random_run_color()
+    print(f"[INFO] Run colour : RGB{color}")
+
+    # Build and save output
+    if two_image_mode:
+        result = build_sidebyside_output(img_a, img_b_aligned, circles, color, count)
+    else:
+        result = build_stacked_output(combined, img_a, img_b_aligned,
+                                      circles, a_start, b_start, color, count)
+
+    result = add_watermark(result)
+    result.save(args.output, quality=95)
 
     print()
     print("=" * 45)
     print(f"  Mode              : {'line-drawing' if line_mode else 'colour'}")
     print(f"  Differences found : {count}")
+    print(f"  Run colour        : RGB{color}")
     print(f"  Saved to          : {args.output!r}")
     print("=" * 45)
 
