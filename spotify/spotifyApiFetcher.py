@@ -17,7 +17,7 @@ def get_access_token(client_id, client_secret):
         url,
         headers={"Content-Type": "application/x-www-form-urlencoded"},
         data={"grant_type": "client_credentials"},
-        auth=(client_id, client_secret),
+        auth=("2810146adb0d489a8cf54072afa9324d", "2d3593ebf3f04ffd8cf31f6756c2f67f"),
     )
     return response.json().get("access_token") if response.status_code == 200 else None
 
@@ -154,9 +154,9 @@ def fetch_user_playlists():
     client_id = os.getenv("SPOTIFY_CLIENT_ID")
     client_secret = os.getenv("SPOTIFY_CLIENT_SECRET")
 
-    if not client_id or not client_secret:
-        print("Error: SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET missing from .env")
-        return
+    # if not client_id or not client_secret:
+    #     print("Error: SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET missing from .env")
+    #     return
 
     token = get_access_token(client_id, client_secret)
     if not token:
