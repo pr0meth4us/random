@@ -2,3 +2,6 @@ combined_files.txt
 .idea
 .env
 *.imi
+credentials.json
+ocr_results/*
+imgCompressor/photos/*

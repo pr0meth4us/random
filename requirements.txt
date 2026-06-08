@@ -22,3 +22,7 @@ scikit-learn
 tqdm
 typing
 yt-dlp
+asyncio
+dotenv
+google-cloud-vision
+google-genai
