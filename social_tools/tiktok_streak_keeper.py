@@ -304,7 +304,21 @@ def send_streak_messages(friends: list[str] | None, message: str, headed: bool) 
                 page.goto("https://www.tiktok.com/inbox", wait_until="load", timeout=30000)
                 page.wait_for_timeout(5000)
                 
-                # Force visibility of the panel
+                # Check if the inbox panel is already visible. If not, open it.
+                inbox_panel = page.locator('#header-inbox-bar').first
+                if not inbox_panel.is_visible():
+                    try:
+                        inbox_icon = page.locator('div[class*="DivHeaderInboxContainer"], [class*="DivHeaderInboxContainer"], [data-e2e="nav-inbox"], button[aria-label*="Inbox"]').first
+                        if inbox_icon.is_visible():
+                            print("Inbox dropdown is not visible. Clicking inbox icon in header to open...")
+                            inbox_icon.click()
+                            page.wait_for_timeout(3000)
+                    except Exception as click_err:
+                        print(f"Warning: Failed to click inbox icon: {click_err}")
+                else:
+                    print("Inbox dropdown is already open.")
+
+                # Force CSS visibility as a secondary fail-safe fallback
                 page.evaluate("""() => {
                     const bar = document.querySelector('#header-inbox-bar');
                     if (!bar) return;
@@ -321,11 +335,19 @@ def send_streak_messages(friends: list[str] | None, message: str, headed: bool) 
                 
                 # Click Comments tab
                 print("Selecting Comments tab...")
-                page.evaluate("""() => {
-                    const btn = document.getElementById('inbox-tab-2') || document.querySelector('[data-e2e="comments"]');
-                    if (btn) btn.click();
-                }""")
-                page.wait_for_timeout(3000)
+                comments_button = page.locator('#inbox-tab-2, button[data-e2e="comments"]').first
+                is_selected = comments_button.get_attribute("aria-selected") == "true"
+                if not is_selected:
+                    if comments_button.is_visible():
+                        comments_button.click()
+                    else:
+                        page.evaluate("""() => {
+                            const btn = document.getElementById('inbox-tab-2') || document.querySelector('[data-e2e="comments"]');
+                            if (btn) btn.click();
+                        }""")
+                    page.wait_for_timeout(4000)
+                else:
+                    print("Comments tab is already active.")
                 
                 # Scroll window to lazy-load older comments (5 scrolls)
                 print("Scrolling to load older comments...")
@@ -337,11 +359,28 @@ def send_streak_messages(friends: list[str] | None, message: str, headed: bool) 
                 notifications = page.evaluate("""() => {
                     const list = document.querySelector('#header-inbox-list');
                     if (!list) return [];
-                    const links = list.querySelectorAll('a');
-                    return Array.from(links).map(a => ({
-                        text: (a.textContent || '').trim().replace(/\\n/g, ' '),
-                        href: a.getAttribute('href') || ''
-                    }));
+                    const items = list.querySelectorAll('[data-e2e="inbox-list-item"]');
+                    return Array.from(items).map(item => {
+                        const titleEl = item.querySelector('[data-e2e="inbox-title"]');
+                        const contentEl = item.querySelector('[data-e2e="inbox-content"]');
+                        const extraEl = item.querySelector('[class*="StyledExtraText"]');
+                        const videoLinkEl = item.querySelector('a:not([href*="/@"]):not([aria-label*="profile"])') || item.querySelector('a[href*="/video/"], a[href*="/photo/"]');
+                        
+                        const title = titleEl ? (titleEl.textContent || '').trim() : '';
+                        const content = contentEl ? (contentEl.textContent || '').trim() : '';
+                        const extra = extraEl ? (extraEl.textContent || '').trim() : '';
+                        const href = videoLinkEl ? videoLinkEl.getAttribute('href') || '' : '';
+                        
+                        let text = `${title} ${content}`;
+                        if (extra) {
+                            text += ` (${extra})`;
+                        }
+                        
+                        return {
+                            text: text.replace(/\\s+/g, ' ').trim(),
+                            href: href
+                        };
+                    });
                 }""")
                 
                 # Filter comments and deduplicate
