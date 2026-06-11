@@ -12,9 +12,65 @@ import time
 from pathlib import Path
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 
+# Load environment variables if running directly
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 SCRIPT_DIR = Path(__file__).resolve().parent
 SESSION_DIR = SCRIPT_DIR / "tiktok_session"
 STATE_FILE = SCRIPT_DIR / "state.json"
+
+
+def load_state_from_db() -> str | None:
+    """
+    Attempts to connect to MongoDB and retrieve the stored TikTok state JSON.
+    """
+    import os
+    mongo_uri = os.getenv("MONGODB_URI")
+    db_name = os.getenv("DB_NAME", "expTracker")
+    if not mongo_uri:
+        return None
+        
+    try:
+        from pymongo import MongoClient
+        print("Connecting to MongoDB to fetch TikTok state...")
+        client = MongoClient(mongo_uri)
+        db = client[db_name]
+        doc = db["tiktok_settings"].find_one({"key": "state_json"})
+        if doc and "value" in doc:
+            print("Successfully retrieved TikTok state from MongoDB.")
+            return doc["value"]
+    except Exception as e:
+        print(f"Warning: Failed to fetch TikTok state from MongoDB: {e}")
+    return None
+
+
+def save_state_to_db(state_json: str) -> None:
+    """
+    Attempts to connect to MongoDB and save the updated TikTok state JSON.
+    """
+    import os
+    mongo_uri = os.getenv("MONGODB_URI")
+    db_name = os.getenv("DB_NAME", "expTracker")
+    if not mongo_uri:
+        return
+        
+    try:
+        from pymongo import MongoClient
+        print("Connecting to MongoDB to save TikTok state...")
+        client = MongoClient(mongo_uri)
+        db = client[db_name]
+        db["tiktok_settings"].update_one(
+            {"key": "state_json"},
+            {"$set": {"value": state_json, "updated_at": time.time()}},
+            upsert=True
+        )
+        print("Successfully saved TikTok state to MongoDB.")
+    except Exception as e:
+        print(f"Warning: Failed to save TikTok state to MongoDB: {e}")
 
 
 def login_mode() -> None:
@@ -67,16 +123,30 @@ def send_streak_messages(friends: list[str] | None, message: str, headed: bool) 
     and sends messages to them.
     """
     import os
-    # Check if TIKTOK_STATE_JSON environment variable is set
-    state_json_env = os.getenv("TIKTOK_STATE_JSON")
-    if state_json_env:
+    
+    # Fallback order for loading state:
+    # A. MongoDB (most dynamic)
+    # B. TIKTOK_STATE_JSON environment variable
+    # C. Local state.json file
+    state_json_content = load_state_from_db()
+    if state_json_content:
         try:
-            # Write it back to state.json
             with open(STATE_FILE, "w", encoding="utf-8") as f:
-                f.write(state_json_env.strip())
-            print("Successfully restored session context from TIKTOK_STATE_JSON environment variable.")
+                f.write(state_json_content.strip())
+            print("Successfully restored session context from MongoDB.")
         except Exception as err:
-            print(f"Warning: Failed to restore TIKTOK_STATE_JSON environment variable: {err}")
+            print(f"Warning: Failed to write MongoDB session state to file: {err}")
+    else:
+        state_json_env = os.getenv("TIKTOK_STATE_JSON")
+        if state_json_env:
+            try:
+                with open(STATE_FILE, "w", encoding="utf-8") as f:
+                    f.write(state_json_env.strip())
+                print("Successfully restored session context from TIKTOK_STATE_JSON environment variable.")
+                # Cache it to MongoDB for subsequent runs
+                save_state_to_db(state_json_env.strip())
+            except Exception as err:
+                print(f"Warning: Failed to restore TIKTOK_STATE_JSON environment variable: {err}")
 
     if not STATE_FILE.exists():
         print(
@@ -216,6 +286,16 @@ def send_streak_messages(friends: list[str] | None, message: str, headed: bool) 
                     print(f"❌ Error: Chat input box not found for '{name}'.")
                     if not headed:
                         page.screenshot(path=str(SCRIPT_DIR / f"failure_input_{name}.png"))
+
+            # Save the updated session state (cookies, local storage) back to state.json and MongoDB
+            try:
+                context.storage_state(path=STATE_FILE)
+                print(f"Updated storage state written to {STATE_FILE}")
+                with open(STATE_FILE, "r", encoding="utf-8") as f:
+                    updated_state = f.read()
+                save_state_to_db(updated_state)
+            except Exception as e:
+                print(f"Warning: Failed to save updated storage state to MongoDB: {e}")
 
         except PlaywrightTimeoutError as err:
             print(f"❌ Automation timed out: {err}")
