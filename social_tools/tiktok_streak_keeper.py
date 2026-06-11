@@ -237,8 +237,12 @@ def send_streak_messages(cli_friends: list[str] | None, message: str, headed: bo
         launch_kwargs = {
             "headless": not headed,
             "args": launch_args,
-            "channel": "chrome"
         }
+        
+        # Only force the Mac Google Chrome app if we are debugging visibly.
+        # Koyeb will safely ignore this and use standard headless Chromium.
+        if headed:
+            launch_kwargs["channel"] = "chrome"
         
         browser = p.chromium.launch(**launch_kwargs)
 
