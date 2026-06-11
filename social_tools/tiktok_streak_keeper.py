@@ -41,11 +41,14 @@ def login_mode() -> None:
 
         # Keep browser open until either 60 seconds pass or the user closes it manually
         start_time = time.time()
-        while time.time() - start_time < 60:
-            if browser.is_connected() and len(browser.pages) > 0:
-                time.sleep(1)
-            else:
-                break
+        try:
+            while time.time() - start_time < 60:
+                if len(browser.pages) > 0 and not page.is_closed():
+                    page.wait_for_timeout(1000)
+                else:
+                    break
+        except Exception:
+            pass
 
         print("\nSession saved successfully. You can now run the script in automation mode.")
         browser.close()
