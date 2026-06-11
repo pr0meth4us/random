@@ -115,7 +115,7 @@ def send_streak_messages(friends: list[str] | None, message: str, headed: bool) 
 
                 # Locate all chat items
                 chat_items_locator = page.locator(
-                    '[data-e2e="message-chat-item"], div[class*="ChatItem"], a[href*="/messages"]'
+                    '[data-e2e="dm-new-conversation-item"], [data-e2e="message-chat-item"], div[class*="ChatItem"], a[href*="/messages"]'
                 )
 
                 try:
@@ -129,23 +129,32 @@ def send_streak_messages(friends: list[str] | None, message: str, headed: bool) 
                 for item in chat_items:
                     has_streak = False
 
-                    # Common selectors or attributes associated with streak flame/combo/badges
-                    streak_selectors = [
-                        '[data-e2e*="streak"]', '[class*="streak"]', '[class*="Streak"]',
-                        '[class*="flame"]', '[class*="Flame"]', '[class*="fire"]', '[class*="Fire"]',
-                        '[class*="combo"]', '[class*="Combo"]', 'img[alt*="streak" i]', 'svg[class*="streak" i]'
-                    ]
-                    for selector in streak_selectors:
-                        try:
-                            if item.locator(selector).first.is_visible():
-                                has_streak = True
-                                break
-                        except Exception:
-                            continue
+                    # Check for fire emoji in the text
+                    try:
+                        text_content = item.inner_text()
+                        if "🔥" in text_content:
+                            has_streak = True
+                    except Exception:
+                        pass
+
+                    if not has_streak:
+                        # Common selectors or attributes associated with streak flame/combo/badges
+                        streak_selectors = [
+                            '[data-e2e*="streak"]', '[class*="streak"]', '[class*="Streak"]',
+                            '[class*="flame"]', '[class*="Flame"]', '[class*="fire"]', '[class*="Fire"]',
+                            '[class*="combo"]', '[class*="Combo"]', 'img[alt*="streak" i]', 'svg[class*="streak" i]'
+                        ]
+                        for selector in streak_selectors:
+                            try:
+                                if item.locator(selector).first.is_visible():
+                                    has_streak = True
+                                    break
+                            except Exception:
+                                continue
 
                     if has_streak:
                         # Extract the friend's name from text inside the chat item
-                        name_element = item.locator('p[class*="Name"], div[class*="Name"], span[class*="Name"], h4, h5').first
+                        name_element = item.locator('[data-e2e="dm-new-conversation-nickname"], p[class*="Name"], div[class*="Name"], span[class*="Name"], h4, h5').first
                         if name_element.is_visible():
                             name = name_element.inner_text().strip()
                         else:
@@ -165,7 +174,7 @@ def send_streak_messages(friends: list[str] | None, message: str, headed: bool) 
                 # If we don't have the item element yet (Explicit Mode), find and click it
                 if item is None:
                     chat_item = page.locator(
-                        'div[class*="ChatItem"], [data-e2e*="chat-item"], a[href*="/messages"]'
+                        '[data-e2e="dm-new-conversation-item"], [data-e2e="message-chat-item"], div[class*="ChatItem"], a[href*="/messages"]'
                     ).filter(has_text=name).first
 
                     if not chat_item.is_visible():
