@@ -62,10 +62,7 @@ def _human_pause_between_friends():
 
 
 def load_state_from_db() -> str | None:
-    """
-    Attempts to connect to MongoDB and retrieve the stored TikTok state JSON.
-    """
-    import os
+    """Attempts to connect to MongoDB and retrieve the stored TikTok state JSON."""
     mongo_uri = os.getenv("MONGODB_URI")
     db_name = os.getenv("DB_NAME", "expTracker")
     if not mongo_uri:
@@ -86,10 +83,7 @@ def load_state_from_db() -> str | None:
 
 
 def save_state_to_db(state_json: str) -> None:
-    """
-    Attempts to connect to MongoDB and save the updated TikTok state JSON.
-    """
-    import os
+    """Attempts to connect to MongoDB and save the updated TikTok state JSON."""
     mongo_uri = os.getenv("MONGODB_URI")
     db_name = os.getenv("DB_NAME", "expTracker")
     if not mongo_uri:
@@ -111,10 +105,7 @@ def save_state_to_db(state_json: str) -> None:
 
 
 def login_mode() -> None:
-    """
-    Launches Chrome in headed mode so the user can log in manually
-    and saves the session context.
-    """
+    """Launches Chrome in headed mode so the user can log in manually."""
     print("\n=== TikTok Streak Keeper: Login Mode ===")
     print("Launching headed browser. Please log into your TikTok account.")
     print("Once logged in, close the browser window or wait 60 seconds to save session.")
@@ -134,7 +125,6 @@ def login_mode() -> None:
         page = browser.pages[0]
         page.goto("https://www.tiktok.com/")
 
-        # Keep browser open until either 60 seconds pass or the user closes it manually
         start_time = time.time()
         try:
             while time.time() - start_time < 60:
@@ -145,7 +135,6 @@ def login_mode() -> None:
         except Exception:
             pass
 
-        # Save cookies/localStorage state to state.json
         browser.storage_state(path=STATE_FILE)
         print(f"\nStorage state exported successfully to: {STATE_FILE}")
         print("Session saved successfully. You can now run the script in automation mode.")
@@ -153,55 +142,84 @@ def login_mode() -> None:
 
 
 def generate_streak_message_pool() -> list[str]:
+    """Generates 500 chaotic bilingual (Khmer Romeng / Gen-Z English) messages."""
     import random
-    greetings = [
-        "Hey", "Hello", "Hi", "Yo", "Hey there", "Hey friend", "Hi there", "What's up",
-        "How's it going", "Morning", "Evening", "Hello hello", "Heyyo", "Hey hey", "Quick hi"
-    ]
-    phrases = [
-        "just keeping our streak alive", "hope you're having a great day", "hope all is well",
-        "sending you some good vibes", "hope your week is going great", "have a fantastic day ahead",
-        "wishing you an awesome day", "hope you're doing well", "just staying connected",
-        "hope you have a wonderful day", "streak keeper time", "hope your day is going well"
-    ]
-    emojis = ["🔥", "✨", "😊", "👋", "🙌", "⚡", "🌟", "😎", "✌️", "💯", "🎉", "🍀", "☀️", "🌈", "🎈"]
-    follow_ups = [
-        "how are things?", "any plans for today?", "what are you up to?", "have a good one!",
-        "catch up soon!", "talk to you later!", "hope you have fun today!", "doing anything exciting?",
-        "let me know how it goes!", "have an awesome day!"
-    ]
+    
+    # Group 1: Greetings & Attention Grabbers
+    greetings = ["yo", "ayo", "alov", "weyy", "hey", "oy", "boss", "bro", "heyyy", "sup", "wassup", "wyd"]
+    
+    # Group 2: Khmer Check-ins & Questions
+    khmer_questions = ["tver ey nv", "hob bay nv", "reply pg", "tv na td", "rean ot td", "mean ey tmey", "sok te", "muy tv"]
+    
+    # Group 3: English Check-ins & Questions
+    eng_questions = ["u good?", "wya", "what's good", "u busy?", "how u been", "surviving?"]
+    
+    # Group 4: Khmer Vibes & Complaints
+    khmer_vibes = ["nguy dek hah", "klen kloun", "ot luy te", "la orn", "chher kbal", "busy mles", "boring hah", "jong tv leng"]
+    
+    # Group 5: English Vibes & Statements
+    eng_vibes = ["im ded", "so tired rn", "cant do this rn", "literally me", "bro im sleep", "im dead", "mood"]
+    
+    # Group 6: Khmer Fillers & Particles
+    khmer_fillers = ["ng eng", "aii", "bat", "ha", "hah", "men ta", "pg", "mles", "der", "nas"]
+    
+    # Group 7: English Slang & Fillers
+    eng_fillers = ["fr", "ngl", "tbh", "lowkey", "highkey", "rn", "bruh", "ong"]
+    
+    # Group 8: Laughs & Sign-offs
+    laughs = ["xD", "xDD", "lol", "lmao", "lmfao", "haha", "hehe", "wkkw", "crying", ""]
     
     pool = set()
     random_gen = random.Random()
+    
+    # Generate exactly 500 unique combinations
     while len(pool) < 500:
         g = random_gen.choice(greetings)
-        p = random_gen.choice(phrases)
-        e = random_gen.choice(emojis)
-        f = random_gen.choice(follow_ups)
-        structure = random_gen.choice([1, 2, 3])
-        if structure == 1:
-            msg = f"{g}! {p} {e}"
-        elif structure == 2:
-            msg = f"{g} {e} {p}. {f}"
-        else:
-            msg = f"{g}! {p}. {f} {e}"
-        pool.add(msg)
+        kq = random_gen.choice(khmer_questions)
+        eq = random_gen.choice(eng_questions)
+        kv = random_gen.choice(khmer_vibes)
+        ev = random_gen.choice(eng_vibes)
+        kf = random_gen.choice(khmer_fillers)
+        ef = random_gen.choice(eng_fillers)
+        l = random_gen.choice(laughs)
+        
+        # 10 BILINGUAL SENTENCE STRUCTURES
+        template = random_gen.choice([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+        
+        if template == 1:
+            msg = f"{kq} {ef} {l}"
+        elif template == 2:
+            msg = f"{g} {ev} {l}"
+        elif template == 3:
+            msg = f"{g} {kv} {kf}"
+        elif template == 4:
+            msg = f"{eq} {ef} {l}"
+        elif template == 5:
+            msg = f"{ev} {l}"
+        elif template == 6:
+            msg = f"{g} {kq} {ef}"
+        elif template == 7:
+            msg = f"{ev} {kf} {l}"
+        elif template == 8:
+            msg = f"{kv} {ef} {l}"
+        elif template == 9:
+            msg = f"{g} {eq}"
+        elif template == 10:
+            msg = f"{kq} {l}"
+            
+        # Clean up weird double spaces or trailing spaces
+        msg = " ".join(msg.split()).strip()
+        
+        if msg:
+            pool.add(msg)
+        
     return list(pool)
 
 
 def send_streak_messages(friends: list[str] | None, message: str, headed: bool) -> None:
-    """
-    Loads saved state.json, opens TikTok messages page.
-    If friends are specified, sends messages to them.
-    Otherwise, automatically scans the chat list for all friends with active streaks
-    and sends messages to them.
-    """
+    """Loads state, opens TikTok, types realistic human messages, and checks comments."""
     import os
     
-    # Fallback order for loading state:
-    # A. MongoDB (most dynamic)
-    # B. TIKTOK_STATE_JSON environment variable
-    # C. Local state.json file
     state_json_content = load_state_from_db()
     if state_json_content:
         try:
@@ -216,17 +234,13 @@ def send_streak_messages(friends: list[str] | None, message: str, headed: bool) 
             try:
                 with open(STATE_FILE, "w", encoding="utf-8") as f:
                     f.write(state_json_env.strip())
-                print("Successfully restored session context from TIKTOK_STATE_JSON environment variable.")
-                # Cache it to MongoDB for subsequent runs
+                print("Successfully restored session context from env.")
                 save_state_to_db(state_json_env.strip())
             except Exception as err:
-                print(f"Warning: Failed to restore TIKTOK_STATE_JSON environment variable: {err}")
+                print(f"Warning: Failed to restore env state: {err}")
 
     if not STATE_FILE.exists():
-        print(
-            f"Error: No active state found. Please run the script in login mode first:"
-        )
-        print("  python social_tools/tiktok_streak_keeper.py --login")
+        print("Error: No active state found. Please run the script in login mode first.")
         sys.exit(1)
 
     print(f"\n=== TikTok Streak Keeper: Automation Mode ===")
@@ -234,17 +248,14 @@ def send_streak_messages(friends: list[str] | None, message: str, headed: bool) 
         print(f"Target friends (explicit list): {', '.join(friends)}")
     else:
         print("Target: All friends with ongoing streaks (Auto-Detect Mode)")
-    print(f"Message to send: '{message}'")
     print(f"Browser mode: {'Headed' if headed else 'Headless'}\n")
 
     with sync_playwright() as p:
-        # ── Anti-detection: proxy, user agent, viewport randomization ──
         launch_args = ["--disable-blink-features=AutomationControlled"]
         launch_kwargs = {
             "headless": not headed,
             "args": launch_args,
         }
-        # Optional residential proxy via env var (e.g. "http://user:pass@proxy-host:port")
         proxy_url = os.getenv("TIKTOK_PROXY")
         if proxy_url:
             launch_kwargs["proxy"] = {"server": proxy_url}
@@ -263,7 +274,6 @@ def send_streak_messages(friends: list[str] | None, message: str, headed: bool) 
         )
         page = context.new_page()
 
-        # Apply stealth patches if available
         if stealth_sync:
             stealth_sync(page)
             print("Stealth patches applied.")
@@ -271,12 +281,9 @@ def send_streak_messages(friends: list[str] | None, message: str, headed: bool) 
         try:
             print("Navigating to TikTok Messages...")
             page.goto("https://www.tiktok.com/messages", wait_until="load", timeout=30000)
-
-            # Human-like initial wait (3-7 seconds)
             print("Waiting for page load...")
             _human_delay(page, 3000, 7000)
 
-            # Scroll list container to load all lazy-loaded chats
             try:
                 first_item = page.locator('[data-e2e="dm-new-conversation-item"]').first
                 first_item.wait_for(state="visible", timeout=10000)
@@ -297,11 +304,9 @@ def send_streak_messages(friends: list[str] | None, message: str, headed: bool) 
                     }"""
                 )
                 if container.as_element():
-                    # Scroll down to lazy-load older chats
                     for _ in range(8):
                         container.as_element().evaluate("el => el.scrollTop += el.clientHeight")
                         _human_delay(page, 600, 1500)
-                    # Scroll back to top
                     container.as_element().evaluate("el => el.scrollTop = 0")
                     _human_delay(page, 800, 1800)
                     print("Finished scrolling chat sidebar.")
@@ -309,40 +314,20 @@ def send_streak_messages(friends: list[str] | None, message: str, headed: bool) 
                 print(f"Warning: Failed to scroll chat list: {e}")
 
             targets = []
-
             if friends:
-                # ── Explicit Friends Mode ──
                 for friend in friends:
                     targets.append((None, friend))
             else:
-                # ── Auto-Detect Streaks Mode ──
-                print("Scanning chat sidebar for ongoing streaks...")
-
-                # ── Auto-Detect Fallback to Hardcoded List ──
-                print("Note: TikTok Web does not natively expose streak badges in the DOM.")
-                print("Defaulting to your hardcoded list of streak friends from the screenshot:")
-                default_friends = [
-                    "Ling令",
-                    "Estelle",
-                    "សមាគមន៍យុវជនប្រឆាំងនឹងសុរ៉ា",
-                    "janthedumbie",
-                    "tov c ey ✨",
-                    "កូនអញកើតម៉ោឪ្យហៅហែងប៉ា",
-                    "Hazelnut",
-                    "Larry"
-                ]
-                print(f"Target friends: {', '.join(default_friends)}")
+                print("Defaulting to hardcoded fallback list.")
+                default_friends = ["Ling令", "Estelle", "សមាគមន៍យុវជនប្រឆាំងនឹងសុរ៉ា", "janthedumbie", "tov c ey ✨", "កូនអញកើតម៉ោឪ្យហៅហែងប៉ា", "Hazelnut", "Larry"]
                 for friend in default_friends:
                     targets.append((None, friend))
 
-            # Generate pool of 500 alternative messages
             message_pool = generate_streak_message_pool()
 
-            # Send messages to the targeted chats
             for item, name in targets:
                 print(f"\nProcessing chat with: '{name}'...")
 
-                # If we don't have the item element yet (Explicit Mode), find and click it
                 if item is None:
                     chat_item = page.locator(
                         '[data-e2e="dm-new-conversation-item"], [data-e2e="message-chat-item"], div[class*="ChatItem"], a[href*="/messages"]'
@@ -355,23 +340,18 @@ def send_streak_messages(friends: list[str] | None, message: str, headed: bool) 
                         print(f"Found chat for '{name}'. Clicking to open...")
                         chat_item.click()
                     else:
-                        print(f"❌ Error: Could not locate chat item for '{name}' in messages list.")
-                        if not headed:
-                            page.screenshot(path=str(SCRIPT_DIR / f"failure_{name}.png"))
+                        print(f"❌ Error: Could not locate chat item for '{name}'.")
                         continue
                 else:
-                    # Auto-Detect Mode: we already have the element, click it directly
                     item.click()
 
-                _human_delay(page, 2000, 5000)  # Wait for chat area to load
+                _human_delay(page, 2000, 5000)
 
-                # Locate text box
                 text_input = page.locator(
                     '[data-e2e="chat-text-input"], [role="textbox"], div[contenteditable="true"], textarea'
                 ).first
 
                 if text_input.is_visible():
-                    # Pick a random message from our pool of 500 options if using the default message
                     if message == "Streak!":
                         current_message = random.choice(message_pool)
                     else:
@@ -379,24 +359,24 @@ def send_streak_messages(friends: list[str] | None, message: str, headed: bool) 
 
                     print(f"Sending message: '{current_message}' to '{name}'...")
                     text_input.click()
-                    _human_delay(page, 500, 1500)  # pause before typing
-                    text_input.fill(current_message)
-                    _human_delay(page, 800, 2000)  # pause before pressing enter
+                    _human_delay(page, 500, 1500)
+                    
+                    # TYPE LIKE A HUMAN: Letter by letter with a random delay between keystrokes
+                    keystroke_delay = random.randint(40, 110)
+                    text_input.press_sequentially(current_message, delay=keystroke_delay)
+                    
+                    _human_delay(page, 800, 2000)
                     text_input.press("Enter")
-                    _human_delay(page, 1500, 4000)  # wait for message to register
+                    _human_delay(page, 1500, 4000)
                     print(f"✅ Message sent successfully to '{name}'!")
                 else:
                     print(f"❌ Error: Chat input box not found for '{name}'.")
-                    if not headed:
-                        page.screenshot(path=str(SCRIPT_DIR / f"failure_input_{name}.png"))
 
-                # Gaussian-distributed delay between friends (mean 45s, range 15-120s)
                 if (item, name) != targets[-1]:
                     sleep_seconds = _human_pause_between_friends()
                     print(f"Waiting {sleep_seconds}s before the next friend...")
                     page.wait_for_timeout(sleep_seconds * 1000)
 
-            # Save the updated session state (cookies, local storage) back to state.json and MongoDB
             try:
                 context.storage_state(path=STATE_FILE)
                 print(f"Updated storage state written to {STATE_FILE}")
@@ -406,65 +386,32 @@ def send_streak_messages(friends: list[str] | None, message: str, headed: bool) 
             except Exception as e:
                 print(f"Warning: Failed to save updated storage state to MongoDB: {e}")
 
-            # ── Check Comment Notifications ──
+            # Inbox Notifications Parsing Block
             try:
                 print("\n=== Checking TikTok Comment Notifications ===")
-                print("Navigating to TikTok Inbox...")
                 page.goto("https://www.tiktok.com/inbox", wait_until="load", timeout=30000)
                 _human_delay(page, 3000, 7000)
                 
-                # Check if the inbox panel is already visible. If not, open it.
                 inbox_panel = page.locator('#header-inbox-bar').first
                 if not inbox_panel.is_visible():
                     try:
-                        inbox_icon = page.locator('div[class*="DivHeaderInboxContainer"], [class*="DivHeaderInboxContainer"], [data-e2e="nav-inbox"], button[aria-label*="Inbox"]').first
+                        inbox_icon = page.locator('div[class*="DivHeaderInboxContainer"], [data-e2e="nav-inbox"]').first
                         if inbox_icon.is_visible():
-                            print("Inbox dropdown is not visible. Clicking inbox icon in header to open...")
                             inbox_icon.click()
                             _human_delay(page, 2000, 5000)
-                    except Exception as click_err:
-                        print(f"Warning: Failed to click inbox icon: {click_err}")
-                else:
-                    print("Inbox dropdown is already open.")
+                    except Exception:
+                        pass
 
-                # Force CSS visibility as a secondary fail-safe fallback
-                page.evaluate("""() => {
-                    const bar = document.querySelector('#header-inbox-bar');
-                    if (!bar) return;
-                    let parent = bar.parentElement;
-                    while (parent && parent.tagName !== 'BODY') {
-                        parent.style.setProperty('display', 'block', 'important');
-                        parent.style.setProperty('visibility', 'visible', 'important');
-                        parent.style.setProperty('opacity', '1', 'important');
-                        parent.style.setProperty('transform', 'none', 'important');
-                        parent = parent.parentElement;
-                    }
-                }""")
-                _human_delay(page, 1500, 3000)
-                
-                # Click Comments tab
-                print("Selecting Comments tab...")
                 comments_button = page.locator('#inbox-tab-2, button[data-e2e="comments"]').first
                 is_selected = comments_button.get_attribute("aria-selected") == "true"
-                if not is_selected:
-                    if comments_button.is_visible():
-                        comments_button.click()
-                    else:
-                        page.evaluate("""() => {
-                            const btn = document.getElementById('inbox-tab-2') || document.querySelector('[data-e2e="comments"]');
-                            if (btn) btn.click();
-                        }""")
+                if not is_selected and comments_button.is_visible():
+                    comments_button.click()
                     _human_delay(page, 3000, 6000)
-                else:
-                    print("Comments tab is already active.")
                 
-                # Scroll window to lazy-load older comments (5 scrolls)
-                print("Scrolling to load older comments...")
                 for i in range(5):
                     page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
                     _human_delay(page, 1000, 2500)
                     
-                # Extract all comments notifications
                 notifications = page.evaluate("""() => {
                     const list = document.querySelector('#header-inbox-list');
                     if (!list) return [];
@@ -473,45 +420,29 @@ def send_streak_messages(friends: list[str] | None, message: str, headed: bool) 
                         const titleEl = item.querySelector('[data-e2e="inbox-title"]');
                         const contentEl = item.querySelector('[data-e2e="inbox-content"]');
                         const extraEl = item.querySelector('[class*="StyledExtraText"]');
-                        const videoLinkEl = item.querySelector('a:not([href*="/@"]):not([aria-label*="profile"])') || item.querySelector('a[href*="/video/"], a[href*="/photo/"]');
-                        
+                        const videoLinkEl = item.querySelector('a:not([href*="/@"]):not([aria-label*="profile"])');
                         const title = titleEl ? (titleEl.textContent || '').trim() : '';
                         const content = contentEl ? (contentEl.textContent || '').trim() : '';
                         const extra = extraEl ? (extraEl.textContent || '').trim() : '';
                         const href = videoLinkEl ? videoLinkEl.getAttribute('href') || '' : '';
-                        
                         let text = `${title} ${content}`;
-                        if (extra) {
-                            text += ` (${extra})`;
-                        }
-                        
-                        return {
-                            text: text.replace(/\\s+/g, ' ').trim(),
-                            href: href
-                        };
+                        if (extra) text += ` (${extra})`;
+                        return { text: text.replace(/\\s+/g, ' ').trim(), href: href };
                     });
                 }""")
                 
-                # Filter comments and deduplicate
                 seen_texts = set()
                 comments_list = []
                 for n in notifications:
                     text = n['text']
                     href = n['href']
-                    if not text:
-                        continue
+                    if not text: continue
                     lower = text.lower()
-                    
-                    # Include: commented on, replied, mentioned in comment
-                    # Exclude: liked
                     is_comment = ("commented" in lower or "replied" in lower or "mentioned" in lower) and "liked" not in lower
                     if is_comment and text not in seen_texts:
                         seen_texts.add(text)
                         comments_list.append({"text": text, "href": href})
                         
-                print(f"Total comments/replies found: {len(comments_list)}")
-                
-                # Load previously seen comments from MongoDB
                 seen_comments_in_db = []
                 mongo_uri = os.getenv("MONGODB_URI")
                 db_name = os.getenv("DB_NAME", "expTracker")
@@ -523,23 +454,16 @@ def send_streak_messages(friends: list[str] | None, message: str, headed: bool) 
                         doc = db["tiktok_settings"].find_one({"key": "seen_comments"})
                         if doc and "value" in doc:
                             seen_comments_in_db = doc["value"]
-                    except Exception as e:
-                        print(f"Warning: Failed to fetch seen comments from DB: {e}")
+                    except Exception:
+                        pass
                         
-                # Identify new comments
-                new_comments = []
-                for c in comments_list:
-                    if c["text"] not in seen_comments_in_db:
-                        new_comments.append(c)
+                new_comments = [c for c in comments_list if c["text"] not in seen_comments_in_db]
                         
                 if new_comments:
                     print(f"\nFound {len(new_comments)} NEW comment notifications!")
                     for c in new_comments:
                         print(f"NEW_COMMENT_ALERT: {c['text']} (Link: https://www.tiktok.com{c['href']})")
-                    
-                    # Update the seen comments in MongoDB
                     all_seen_comments = seen_comments_in_db + [c["text"] for c in new_comments]
-                    # Keep max 100 to avoid DB document bloat
                     all_seen_comments = all_seen_comments[-100:]
                     if mongo_uri:
                         try:
@@ -551,9 +475,8 @@ def send_streak_messages(friends: list[str] | None, message: str, headed: bool) 
                                 {"$set": {"value": all_seen_comments, "updated_at": time.time()}},
                                 upsert=True
                             )
-                            print("Updated seen comments in MongoDB.")
-                        except Exception as e:
-                            print(f"Warning: Failed to save seen comments to DB: {e}")
+                        except Exception:
+                            pass
                 else:
                     print("No new comment notifications since last run.")
                     
@@ -567,51 +490,24 @@ def send_streak_messages(friends: list[str] | None, message: str, headed: bool) 
         finally:
             print("\nClosing browser...")
             browser.close()
-            
-            # Clean up/delete local state.json file for security
             if STATE_FILE.exists():
                 try:
                     STATE_FILE.unlink()
-                    print(f"Cleaned up local state file: {STATE_FILE}")
-                except Exception as e:
-                    print(f"Warning: Failed to delete local state file: {e}")
-
+                except Exception:
+                    pass
 
 def main() -> None:
-    """
-    Entry point to parse arguments and launch correct execution mode.
-    """
-    parser = argparse.ArgumentParser(
-        description="Automate sending direct messages on TikTok to maintain streaks."
-    )
-    parser.add_argument(
-        "--login",
-        action="store_true",
-        help="Run script in login mode to authenticate and save session.",
-    )
-    parser.add_argument(
-        "--friend",
-        action="append",
-        help="Friend's display name or username to message. If omitted, sends to all friends with active streaks.",
-    )
-    parser.add_argument(
-        "--message",
-        default="Streak!",
-        help="Custom streak message to send (default: 'Streak!').",
-    )
-    parser.add_argument(
-        "--headed",
-        action="store_true",
-        help="Run automation browser in headed mode (visible window).",
-    )
-
+    parser = argparse.ArgumentParser(description="Automate sending direct messages on TikTok.")
+    parser.add_argument("--login", action="store_true", help="Run script in login mode.")
+    parser.add_argument("--friend", action="append", help="Friend's display name to message.")
+    parser.add_argument("--message", default="Streak!", help="Custom message (default triggers dynamic pool).")
+    parser.add_argument("--headed", action="store_true", help="Run browser visibly.")
     args = parser.parse_args()
 
     if args.login:
         login_mode()
     else:
         send_streak_messages(args.friend, args.message, args.headed)
-
 
 if __name__ == "__main__":
     main()
