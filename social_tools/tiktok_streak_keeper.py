@@ -297,6 +297,121 @@ def send_streak_messages(friends: list[str] | None, message: str, headed: bool) 
             except Exception as e:
                 print(f"Warning: Failed to save updated storage state to MongoDB: {e}")
 
+            # ── Check Comment Notifications ──
+            try:
+                print("\n=== Checking TikTok Comment Notifications ===")
+                print("Navigating to TikTok Inbox...")
+                page.goto("https://www.tiktok.com/inbox", wait_until="load", timeout=30000)
+                page.wait_for_timeout(5000)
+                
+                # Force visibility of the panel
+                page.evaluate("""() => {
+                    const bar = document.querySelector('#header-inbox-bar');
+                    if (!bar) return;
+                    let parent = bar.parentElement;
+                    while (parent && parent.tagName !== 'BODY') {
+                        parent.style.setProperty('display', 'block', 'important');
+                        parent.style.setProperty('visibility', 'visible', 'important');
+                        parent.style.setProperty('opacity', '1', 'important');
+                        parent.style.setProperty('transform', 'none', 'important');
+                        parent = parent.parentElement;
+                    }
+                }""")
+                page.wait_for_timeout(2000)
+                
+                # Click Comments tab
+                print("Selecting Comments tab...")
+                page.evaluate("""() => {
+                    const btn = document.getElementById('inbox-tab-2') || document.querySelector('[data-e2e="comments"]');
+                    if (btn) btn.click();
+                }""")
+                page.wait_for_timeout(3000)
+                
+                # Scroll window to lazy-load older comments (5 scrolls)
+                print("Scrolling to load older comments...")
+                for i in range(5):
+                    page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                    page.wait_for_timeout(1200)
+                    
+                # Extract all comments notifications
+                notifications = page.evaluate("""() => {
+                    const list = document.querySelector('#header-inbox-list');
+                    if (!list) return [];
+                    const links = list.querySelectorAll('a');
+                    return Array.from(links).map(a => ({
+                        text: (a.textContent || '').trim().replace(/\\n/g, ' '),
+                        href: a.getAttribute('href') || ''
+                    }));
+                }""")
+                
+                # Filter comments and deduplicate
+                seen_texts = set()
+                comments_list = []
+                for n in notifications:
+                    text = n['text']
+                    href = n['href']
+                    if not text:
+                        continue
+                    lower = text.lower()
+                    
+                    # Include: commented on, replied, mentioned in comment
+                    # Exclude: liked
+                    is_comment = ("commented" in lower or "replied" in lower or "mentioned" in lower) and "liked" not in lower
+                    if is_comment and text not in seen_texts:
+                        seen_texts.add(text)
+                        comments_list.append({"text": text, "href": href})
+                        
+                print(f"Total comments/replies found: {len(comments_list)}")
+                
+                # Load previously seen comments from MongoDB
+                seen_comments_in_db = []
+                mongo_uri = os.getenv("MONGODB_URI")
+                db_name = os.getenv("DB_NAME", "expTracker")
+                if mongo_uri:
+                    try:
+                        from pymongo import MongoClient
+                        client = MongoClient(mongo_uri)
+                        db = client[db_name]
+                        doc = db["tiktok_settings"].find_one({"key": "seen_comments"})
+                        if doc and "value" in doc:
+                            seen_comments_in_db = doc["value"]
+                    except Exception as e:
+                        print(f"Warning: Failed to fetch seen comments from DB: {e}")
+                        
+                # Identify new comments
+                new_comments = []
+                for c in comments_list:
+                    if c["text"] not in seen_comments_in_db:
+                        new_comments.append(c)
+                        
+                if new_comments:
+                    print(f"\nFound {len(new_comments)} NEW comment notifications!")
+                    for c in new_comments:
+                        print(f"NEW_COMMENT_ALERT: {c['text']} (Link: https://www.tiktok.com{c['href']})")
+                    
+                    # Update the seen comments in MongoDB
+                    all_seen_comments = seen_comments_in_db + [c["text"] for c in new_comments]
+                    # Keep max 100 to avoid DB document bloat
+                    all_seen_comments = all_seen_comments[-100:]
+                    if mongo_uri:
+                        try:
+                            from pymongo import MongoClient
+                            client = MongoClient(mongo_uri)
+                            db = client[db_name]
+                            db["tiktok_settings"].update_one(
+                                {"key": "seen_comments"},
+                                {"$set": {"value": all_seen_comments, "updated_at": time.time()}},
+                                upsert=True
+                            )
+                            print("Updated seen comments in MongoDB.")
+                        except Exception as e:
+                            print(f"Warning: Failed to save seen comments to DB: {e}")
+                else:
+                    print("No new comment notifications since last run.")
+                    
+            except Exception as comment_err:
+                print(f"Warning: Failed to check comment notifications: {comment_err}")
+
         except PlaywrightTimeoutError as err:
             print(f"❌ Automation timed out: {err}")
         except Exception as err:
@@ -304,6 +419,14 @@ def send_streak_messages(friends: list[str] | None, message: str, headed: bool) 
         finally:
             print("\nClosing browser...")
             browser.close()
+            
+            # Clean up/delete local state.json file for security
+            if STATE_FILE.exists():
+                try:
+                    STATE_FILE.unlink()
+                    print(f"Cleaned up local state file: {STATE_FILE}")
+                except Exception as e:
+                    print(f"Warning: Failed to delete local state file: {e}")
 
 
 def main() -> None:
