@@ -105,67 +105,22 @@ def send_streak_messages(friends: list[str] | None, message: str, headed: bool) 
                 # ── Auto-Detect Streaks Mode ──
                 print("Scanning chat sidebar for ongoing streaks...")
 
-                # Scroll the sidebar slightly to trigger lazy-loaded elements
-                sidebar = page.locator('div[class*="ChatList"], [data-e2e="chat-list"], div[class*="Sidebar"]').first
-                if sidebar.is_visible():
-                    sidebar.evaluate("element => element.scrollTop = 400")
-                    page.wait_for_timeout(1000)
-                    sidebar.evaluate("element => element.scrollTop = 0")
-                    page.wait_for_timeout(1000)
-
-                # Locate all chat items
-                chat_items_locator = page.locator(
-                    '[data-e2e="dm-new-conversation-item"], [data-e2e="message-chat-item"], div[class*="ChatItem"], a[href*="/messages"]'
-                )
-
-                try:
-                    chat_items_locator.first.wait_for(timeout=10000)
-                except Exception:
-                    print("Warning: Could not locate chat items sidebar. Is the screen size too small or session expired?")
-
-                chat_items = chat_items_locator.all()
-                print(f"Found {len(chat_items)} total chats in sidebar. Checking for streak badges...")
-
-                for item in chat_items:
-                    has_streak = False
-
-                    # Check for fire emoji in the text
-                    try:
-                        text_content = item.inner_text()
-                        if "🔥" in text_content:
-                            has_streak = True
-                    except Exception:
-                        pass
-
-                    if not has_streak:
-                        # Common selectors or attributes associated with streak flame/combo/badges
-                        streak_selectors = [
-                            '[data-e2e*="streak"]', '[class*="streak"]', '[class*="Streak"]',
-                            '[class*="flame"]', '[class*="Flame"]', '[class*="fire"]', '[class*="Fire"]',
-                            '[class*="combo"]', '[class*="Combo"]', 'img[alt*="streak" i]', 'svg[class*="streak" i]'
-                        ]
-                        for selector in streak_selectors:
-                            try:
-                                if item.locator(selector).first.is_visible():
-                                    has_streak = True
-                                    break
-                            except Exception:
-                                continue
-
-                    if has_streak:
-                        # Extract the friend's name from text inside the chat item
-                        name_element = item.locator('[data-e2e="dm-new-conversation-nickname"], p[class*="Name"], div[class*="Name"], span[class*="Name"], h4, h5').first
-                        if name_element.is_visible():
-                            name = name_element.inner_text().strip()
-                        else:
-                            all_text = item.inner_text().strip()
-                            name = all_text.split('\n')[0] if all_text else "Unknown Friend"
-
-                        print(f"Found active streak with: '{name}'")
-                        targets.append((item, name))
-
-                if not targets:
-                    print("No active streaks detected in the sidebar.")
+                # ── Auto-Detect Fallback to Hardcoded List ──
+                print("Note: TikTok Web does not natively expose streak badges in the DOM.")
+                print("Defaulting to your hardcoded list of streak friends from the screenshot:")
+                default_friends = [
+                    "Ling令",
+                    "Estelle",
+                    "សមាគមន៍យុវជនប្រឆាំងនឹងសុរ៉ា",
+                    "janthedumbie",
+                    "tov c ey ✨",
+                    "កូនអញកើតម៉ោឪ្យហៅហែងប៉ា",
+                    "Hazelnut",
+                    "Larry"
+                ]
+                print(f"Target friends: {', '.join(default_friends)}")
+                for friend in default_friends:
+                    targets.append((None, friend))
 
             # Send messages to the targeted chats
             for item, name in targets:
