@@ -8,7 +8,7 @@ A utility script to merge multiple PDF documents into a single PDF file.
 import argparse
 from pathlib import Path
 from typing import List
-from pypdf import PdfMerger, errors
+from pypdf import PdfWriter, errors
 
 
 def merge_pdfs(input_paths: List[Path], output_path: Path) -> None:
@@ -19,7 +19,7 @@ def merge_pdfs(input_paths: List[Path], output_path: Path) -> None:
         input_paths: List of Path objects to the input PDF files.
         output_path: Path object where the merged PDF will be saved.
     """
-    merger = PdfMerger()
+    merger = PdfWriter()
 
     try:
         for path in input_paths:
