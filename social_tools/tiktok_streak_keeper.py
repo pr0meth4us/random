@@ -14,6 +14,7 @@ from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeo
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 SESSION_DIR = SCRIPT_DIR / "tiktok_session"
+STATE_FILE = SCRIPT_DIR / "state.json"
 
 
 def login_mode() -> None:
@@ -24,7 +25,8 @@ def login_mode() -> None:
     print("\n=== TikTok Streak Keeper: Login Mode ===")
     print("Launching headed browser. Please log into your TikTok account.")
     print("Once logged in, close the browser window or wait 60 seconds to save session.")
-    print(f"Session data will be stored in: {SESSION_DIR}\n")
+    print(f"Persistent session will be stored in: {SESSION_DIR}")
+    print(f"State JSON will be exported to: {STATE_FILE}\n")
 
     SESSION_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -50,20 +52,35 @@ def login_mode() -> None:
         except Exception:
             pass
 
-        print("\nSession saved successfully. You can now run the script in automation mode.")
+        # Save cookies/localStorage state to state.json
+        browser.storage_state(path=STATE_FILE)
+        print(f"\nStorage state exported successfully to: {STATE_FILE}")
+        print("Session saved successfully. You can now run the script in automation mode.")
         browser.close()
 
 
 def send_streak_messages(friends: list[str] | None, message: str, headed: bool) -> None:
     """
-    Loads saved session state, opens TikTok messages page.
+    Loads saved state.json, opens TikTok messages page.
     If friends are specified, sends messages to them.
     Otherwise, automatically scans the chat list for all friends with active streaks
     and sends messages to them.
     """
-    if not SESSION_DIR.exists() or not any(SESSION_DIR.iterdir()):
+    import os
+    # Check if TIKTOK_STATE_JSON environment variable is set
+    state_json_env = os.getenv("TIKTOK_STATE_JSON")
+    if state_json_env:
+        try:
+            # Write it back to state.json
+            with open(STATE_FILE, "w", encoding="utf-8") as f:
+                f.write(state_json_env.strip())
+            print("Successfully restored session context from TIKTOK_STATE_JSON environment variable.")
+        except Exception as err:
+            print(f"Warning: Failed to restore TIKTOK_STATE_JSON environment variable: {err}")
+
+    if not STATE_FILE.exists():
         print(
-            "Error: No active session found. Please run the script in login mode first:"
+            f"Error: No active state found. Please run the script in login mode first:"
         )
         print("  python social_tools/tiktok_streak_keeper.py --login")
         sys.exit(1)
@@ -77,15 +94,16 @@ def send_streak_messages(friends: list[str] | None, message: str, headed: bool) 
     print(f"Browser mode: {'Headed' if headed else 'Headless'}\n")
 
     with sync_playwright() as p:
-        # Launch Chromium with persistent context to load saved session
-        browser = p.chromium.launch_persistent_context(
-            user_data_dir=SESSION_DIR,
+        # Launch Chromium and load context using state.json
+        browser = p.chromium.launch(
             headless=not headed,
-            viewport={"width": 1280, "height": 800},
-            args=["--disable-blink-features=AutomationControlled"],
+            args=["--disable-blink-features=AutomationControlled"]
         )
-
-        page = browser.pages[0]
+        context = browser.new_context(
+            storage_state=STATE_FILE,
+            viewport={"width": 1280, "height": 800}
+        )
+        page = context.new_page()
 
         try:
             print("Navigating to TikTok Messages...")
@@ -94,6 +112,38 @@ def send_streak_messages(friends: list[str] | None, message: str, headed: bool) 
             # Wait for messages page structure to load
             print("Waiting for page load...")
             page.wait_for_timeout(5000)  # Give it a few seconds to load completely
+
+            # Scroll list container to load all lazy-loaded chats
+            try:
+                first_item = page.locator('[data-e2e="dm-new-conversation-item"]').first
+                first_item.wait_for(state="visible", timeout=10000)
+                print("Scrolling chat sidebar to load all conversation items...")
+                container = page.evaluate_handle(
+                    """() => {
+                        const item = document.querySelector('[data-e2e="dm-new-conversation-item"]');
+                        if (!item) return null;
+                        let parent = item.parentElement;
+                        while (parent) {
+                            const style = window.getComputedStyle(parent);
+                            if (style.overflowY === 'auto' || style.overflowY === 'scroll') {
+                                return parent;
+                            }
+                            parent = parent.parentElement;
+                        }
+                        return null;
+                    }"""
+                )
+                if container.as_element():
+                    # Scroll down to lazy-load older chats
+                    for _ in range(8):
+                        container.as_element().evaluate("el => el.scrollTop += el.clientHeight")
+                        page.wait_for_timeout(800)
+                    # Scroll back to top
+                    container.as_element().evaluate("el => el.scrollTop = 0")
+                    page.wait_for_timeout(1000)
+                    print("Finished scrolling chat sidebar.")
+            except Exception as e:
+                print(f"Warning: Failed to scroll chat list: {e}")
 
             targets = []
 
