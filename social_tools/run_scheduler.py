@@ -18,16 +18,14 @@ MESSAGE_ENV = os.getenv("TIKTOK_MESSAGE", "Streak!")
 RUN_TIME_HOUR = int(os.getenv("SCHEDULE_HOUR", "0"))      # 12 AM (00:00)
 RUN_TIME_MINUTE = int(os.getenv("SCHEDULE_MINUTE", "2"))  # 02 minutes (12:02 AM)
 
-if not FRIENDS_ENV:
-    print("Error: TIKTOK_FRIENDS environment variable is not set.")
-    print("Please set TIKTOK_FRIENDS to a comma-separated list of friend names.")
-    sys.exit(1)
-
-FRIENDS = [f.strip() for f in FRIENDS_ENV.split(",") if f.strip()]
+FRIENDS = [f.strip() for f in FRIENDS_ENV.split(",") if f.strip()] if FRIENDS_ENV else []
 
 print("=== TikTok Streak Keeper Scheduler ===")
 print(f"Scheduled Time: {RUN_TIME_HOUR:02d}:{RUN_TIME_MINUTE:02d} daily")
-print(f"Friends to message: {', '.join(FRIENDS)}")
+if FRIENDS:
+    print(f"Friends to message: {', '.join(FRIENDS)}")
+else:
+    print("Friends: Auto-detecting all active streaks in the sidebar")
 print(f"Message: '{MESSAGE_ENV}'\n")
 
 while True:

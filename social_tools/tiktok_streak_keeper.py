@@ -51,10 +51,12 @@ def login_mode() -> None:
         browser.close()
 
 
-def send_streak_messages(friends: list[str], message: str, headed: bool) -> None:
+def send_streak_messages(friends: list[str] | None, message: str, headed: bool) -> None:
     """
-    Loads saved session state, opens TikTok messages page, selects
-    each specified friend, and sends the streak message.
+    Loads saved session state, opens TikTok messages page.
+    If friends are specified, sends messages to them.
+    Otherwise, automatically scans the chat list for all friends with active streaks
+    and sends messages to them.
     """
     if not SESSION_DIR.exists() or not any(SESSION_DIR.iterdir()):
         print(
@@ -64,7 +66,10 @@ def send_streak_messages(friends: list[str], message: str, headed: bool) -> None
         sys.exit(1)
 
     print(f"\n=== TikTok Streak Keeper: Automation Mode ===")
-    print(f"Friends to contact: {', '.join(friends)}")
+    if friends:
+        print(f"Target friends (explicit list): {', '.join(friends)}")
+    else:
+        print("Target: All friends with ongoing streaks (Auto-Detect Mode)")
     print(f"Message to send: '{message}'")
     print(f"Browser mode: {'Headed' if headed else 'Headless'}\n")
 
@@ -87,45 +92,113 @@ def send_streak_messages(friends: list[str], message: str, headed: bool) -> None
             print("Waiting for page load...")
             page.wait_for_timeout(5000)  # Give it a few seconds to load completely
 
-            for friend in friends:
-                print(f"\nLooking for chat with: '{friend}'...")
+            targets = []
 
-                # Look for a chat list item containing friend's name (case-insensitive text match)
-                chat_item = page.locator(
-                    'div[class*="ChatItem"], [data-e2e*="chat-item"], a[href*="/messages"]'
-                ).filter(has_text=friend).first
+            if friends:
+                # ── Explicit Friends Mode ──
+                for friend in friends:
+                    targets.append((None, friend))
+            else:
+                # ── Auto-Detect Streaks Mode ──
+                print("Scanning chat sidebar for ongoing streaks...")
 
-                if not chat_item.is_visible():
-                    # Fallback locator: check standard text elements containing friend name
-                    chat_item = page.get_by_text(friend, exact=False).first
+                # Scroll the sidebar slightly to trigger lazy-loaded elements
+                sidebar = page.locator('div[class*="ChatList"], [data-e2e="chat-list"], div[class*="Sidebar"]').first
+                if sidebar.is_visible():
+                    sidebar.evaluate("element => element.scrollTop = 400")
+                    page.wait_for_timeout(1000)
+                    sidebar.evaluate("element => element.scrollTop = 0")
+                    page.wait_for_timeout(1000)
 
-                if chat_item.is_visible():
-                    print(f"Found chat for '{friend}'. Clicking to open...")
-                    chat_item.click()
-                    page.wait_for_timeout(2000)  # Wait for chat area to load
+                # Locate all chat items
+                chat_items_locator = page.locator(
+                    '[data-e2e="message-chat-item"], div[class*="ChatItem"], a[href*="/messages"]'
+                )
 
-                    # Locate text box
-                    text_input = page.locator(
-                        '[data-e2e="chat-text-input"], [role="textbox"], div[contenteditable="true"], textarea'
-                    ).first
+                try:
+                    chat_items_locator.first.wait_for(timeout=10000)
+                except Exception:
+                    print("Warning: Could not locate chat items sidebar. Is the screen size too small or session expired?")
 
-                    if text_input.is_visible():
-                        print(f"Sending message: '{message}' to '{friend}'...")
-                        text_input.click()
-                        text_input.fill(message)
-                        page.wait_for_timeout(1000)
-                        text_input.press("Enter")
-                        page.wait_for_timeout(2000)  # Wait for message to register
-                        print(f"✅ Message sent to '{friend}'!")
+                chat_items = chat_items_locator.all()
+                print(f"Found {len(chat_items)} total chats in sidebar. Checking for streak badges...")
+
+                for item in chat_items:
+                    has_streak = False
+
+                    # Common selectors or attributes associated with streak flame/combo/badges
+                    streak_selectors = [
+                        '[data-e2e*="streak"]', '[class*="streak"]', '[class*="Streak"]',
+                        '[class*="flame"]', '[class*="Flame"]', '[class*="fire"]', '[class*="Fire"]',
+                        '[class*="combo"]', '[class*="Combo"]', 'img[alt*="streak" i]', 'svg[class*="streak" i]'
+                    ]
+                    for selector in streak_selectors:
+                        try:
+                            if item.locator(selector).first.is_visible():
+                                has_streak = True
+                                break
+                        except Exception:
+                            continue
+
+                    if has_streak:
+                        # Extract the friend's name from text inside the chat item
+                        name_element = item.locator('p[class*="Name"], div[class*="Name"], span[class*="Name"], h4, h5').first
+                        if name_element.is_visible():
+                            name = name_element.inner_text().strip()
+                        else:
+                            all_text = item.inner_text().strip()
+                            name = all_text.split('\n')[0] if all_text else "Unknown Friend"
+
+                        print(f"Found active streak with: '{name}'")
+                        targets.append((item, name))
+
+                if not targets:
+                    print("No active streaks detected in the sidebar.")
+
+            # Send messages to the targeted chats
+            for item, name in targets:
+                print(f"\nProcessing chat with: '{name}'...")
+
+                # If we don't have the item element yet (Explicit Mode), find and click it
+                if item is None:
+                    chat_item = page.locator(
+                        'div[class*="ChatItem"], [data-e2e*="chat-item"], a[href*="/messages"]'
+                    ).filter(has_text=name).first
+
+                    if not chat_item.is_visible():
+                        chat_item = page.get_by_text(name, exact=False).first
+
+                    if chat_item.is_visible():
+                        print(f"Found chat for '{name}'. Clicking to open...")
+                        chat_item.click()
                     else:
-                        print(f"❌ Error: Chat input box not found for '{friend}'.")
+                        print(f"❌ Error: Could not locate chat item for '{name}' in messages list.")
+                        if not headed:
+                            page.screenshot(path=str(SCRIPT_DIR / f"failure_{name}.png"))
+                        continue
                 else:
-                    print(f"❌ Error: Could not locate chat item for '{friend}' in messages list.")
-                    # Take screenshot for debugging if running headless
+                    # Auto-Detect Mode: we already have the element, click it directly
+                    item.click()
+
+                page.wait_for_timeout(2000)  # Wait for chat area to load
+
+                # Locate text box
+                text_input = page.locator(
+                    '[data-e2e="chat-text-input"], [role="textbox"], div[contenteditable="true"], textarea'
+                ).first
+
+                if text_input.is_visible():
+                    print(f"Sending message: '{message}' to '{name}'...")
+                    text_input.click()
+                    text_input.fill(message)
+                    page.wait_for_timeout(1000)
+                    text_input.press("Enter")
+                    page.wait_for_timeout(2000)  # Wait for message to register
+                    print(f"✅ Message sent successfully to '{name}'!")
+                else:
+                    print(f"❌ Error: Chat input box not found for '{name}'.")
                     if not headed:
-                        screenshot_path = SCRIPT_DIR / f"failure_{friend}.png"
-                        page.screenshot(path=str(screenshot_path))
-                        print(f"Screenshot saved for debugging: {screenshot_path}")
+                        page.screenshot(path=str(SCRIPT_DIR / f"failure_input_{name}.png"))
 
         except PlaywrightTimeoutError as err:
             print(f"❌ Automation timed out: {err}")
@@ -151,7 +224,7 @@ def main() -> None:
     parser.add_argument(
         "--friend",
         action="append",
-        help="Friend's display name or username to message. Can be specified multiple times.",
+        help="Friend's display name or username to message. If omitted, sends to all friends with active streaks.",
     )
     parser.add_argument(
         "--message",
@@ -169,10 +242,6 @@ def main() -> None:
     if args.login:
         login_mode()
     else:
-        if not args.friend:
-            print("Error: Please specify at least one friend with --friend.")
-            print("Example: python social_tools/tiktok_streak_keeper.py --friend 'Friend Name'")
-            sys.exit(1)
         send_streak_messages(args.friend, args.message, args.headed)
 
 
