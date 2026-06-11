@@ -115,6 +115,43 @@ def login_mode() -> None:
         browser.close()
 
 
+def generate_streak_message_pool() -> list[str]:
+    import random
+    greetings = [
+        "Hey", "Hello", "Hi", "Yo", "Hey there", "Hey friend", "Hi there", "What's up",
+        "How's it going", "Morning", "Evening", "Hello hello", "Heyyo", "Hey hey", "Quick hi"
+    ]
+    phrases = [
+        "just keeping our streak alive", "hope you're having a great day", "hope all is well",
+        "sending you some good vibes", "hope your week is going great", "have a fantastic day ahead",
+        "wishing you an awesome day", "hope you're doing well", "just staying connected",
+        "hope you have a wonderful day", "streak keeper time", "hope your day is going well"
+    ]
+    emojis = ["🔥", "✨", "😊", "👋", "🙌", "⚡", "🌟", "😎", "✌️", "💯", "🎉", "🍀", "☀️", "🌈", "🎈"]
+    follow_ups = [
+        "how are things?", "any plans for today?", "what are you up to?", "have a good one!",
+        "catch up soon!", "talk to you later!", "hope you have fun today!", "doing anything exciting?",
+        "let me know how it goes!", "have an awesome day!"
+    ]
+    
+    pool = set()
+    random_gen = random.Random()
+    while len(pool) < 500:
+        g = random_gen.choice(greetings)
+        p = random_gen.choice(phrases)
+        e = random_gen.choice(emojis)
+        f = random_gen.choice(follow_ups)
+        structure = random_gen.choice([1, 2, 3])
+        if structure == 1:
+            msg = f"{g}! {p} {e}"
+        elif structure == 2:
+            msg = f"{g} {e} {p}. {f}"
+        else:
+            msg = f"{g}! {p}. {f} {e}"
+        pool.add(msg)
+    return list(pool)
+
+
 def send_streak_messages(friends: list[str] | None, message: str, headed: bool) -> None:
     """
     Loads saved state.json, opens TikTok messages page.
@@ -242,6 +279,10 @@ def send_streak_messages(friends: list[str] | None, message: str, headed: bool) 
                 for friend in default_friends:
                     targets.append((None, friend))
 
+            # Generate pool of 500 alternative messages
+            message_pool = generate_streak_message_pool()
+            import random
+
             # Send messages to the targeted chats
             for item, name in targets:
                 print(f"\nProcessing chat with: '{name}'...")
@@ -275,9 +316,15 @@ def send_streak_messages(friends: list[str] | None, message: str, headed: bool) 
                 ).first
 
                 if text_input.is_visible():
-                    print(f"Sending message: '{message}' to '{name}'...")
+                    # Pick a random message from our pool of 500 options if using the default message
+                    if message == "Streak!":
+                        current_message = random.choice(message_pool)
+                    else:
+                        current_message = message
+
+                    print(f"Sending message: '{current_message}' to '{name}'...")
                     text_input.click()
-                    text_input.fill(message)
+                    text_input.fill(current_message)
                     page.wait_for_timeout(1000)
                     text_input.press("Enter")
                     page.wait_for_timeout(2000)  # Wait for message to register
@@ -286,6 +333,12 @@ def send_streak_messages(friends: list[str] | None, message: str, headed: bool) 
                     print(f"❌ Error: Chat input box not found for '{name}'.")
                     if not headed:
                         page.screenshot(path=str(SCRIPT_DIR / f"failure_input_{name}.png"))
+
+                # Add human-like delay between sending messages to different friends to avoid bot detection
+                if (item, name) != targets[-1]:
+                    sleep_seconds = random.randint(8, 18)
+                    print(f"Waiting {sleep_seconds} seconds before the next friend to look human...")
+                    page.wait_for_timeout(sleep_seconds * 1000)
 
             # Save the updated session state (cookies, local storage) back to state.json and MongoDB
             try:
