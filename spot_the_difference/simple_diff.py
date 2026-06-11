@@ -1,9 +1,20 @@
+"""
+simple_diff.py
+--------------
+Finds and circles differences between the top and bottom halves of an image
+(e.g., spot-the-difference puzzle).
+"""
+
+from pathlib import Path
 import cv2
-import numpy as np
 
 
-def find_and_circle_differences(image_path):
-    image = cv2.imread(image_path)
+def find_and_circle_differences(image_path: Path):
+    """
+    Loads the puzzle image, splits it into top and bottom halves,
+    computes the pixel difference, and circles the differences.
+    """
+    image = cv2.imread(str(image_path))
 
     if image is None:
         print(f"Error: Could not load '{image_path}'.")
@@ -13,8 +24,8 @@ def find_and_circle_differences(image_path):
     half_height = height // 2
 
     # 1. Shave off the edges to ignore the outer cyan borders completely
-    top_half = image[15:half_height - 15, 15:width - 15]
-    bottom_half = image[half_height + 15:height - 15, 15:width - 15]
+    top_half = image[15 : half_height - 15, 15 : width - 15]
+    bottom_half = image[half_height + 15 : height - 15, 15 : width - 15]
 
     # 2. Force exact dimensions
     min_height = min(top_half.shape[0], bottom_half.shape[0])
@@ -39,20 +50,22 @@ def find_and_circle_differences(image_path):
     for contour in contours:
         area = cv2.contourArea(contour)
 
-        # 5. THE FIX: Strict area filter.
+        # 5. Strict area filter:
         # Only draw a circle if the difference is roughly the size of a single number.
-        # This prevents the giant overlapping border circles and tiny speckles.
         if 50 < area < 800:
             x, y, w, h = cv2.boundingRect(contour)
             center = (x + w // 2, y + h // 2)
             radius = max(w, h) // 2 + 10
             cv2.circle(result_image, center, radius, (0, 0, 255), 2)
 
-    output_filename = "differences_circled_fixed.jpg"
-    cv2.imwrite(output_filename, result_image)
-    print(f"Done. Check '{output_filename}' for a much less stupid result.")
+    script_dir = Path(__file__).resolve().parent
+    output_path = script_dir / "differences_circled_fixed.jpg"
+    cv2.imwrite(str(output_path), result_image)
+    print(f"Done. Check '{output_path}' for the results.")
 
 
-# Run the script
-file_name = "657508906_1990854864882756_6868413732217022383_n.jpg"
-find_and_circle_differences(file_name)
+if __name__ == "__main__":
+    # Run the script with default test image
+    SCRIPT_DIR = Path(__file__).resolve().parent
+    TEST_IMAGE = SCRIPT_DIR / "test_image.jpg"
+    find_and_circle_differences(TEST_IMAGE)
