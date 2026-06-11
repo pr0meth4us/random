@@ -14,6 +14,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Added `pypdf` and `playwright` dependencies to virtual environment and registered them in `requirements.txt`.
 
 ### Changed
+- **TikTok Streak Keeper Anti-Detection**: Upgraded browser automation to utilize `playwright-stealth` (if available), random desktop User Agents, and randomized viewports.
+- **Humanized Timing**: Replaced rigid waits with randomized human-like delays for typing, clicking, and scrolling, and implemented a Gaussian delay distribution (15-120 seconds, mean 45s) between messaging different friends.
+- **Streak Timing & Jitter**: Updated the daily scheduler to trigger at 11:00 PM with 0-20 minutes random daily jitter to ensure all messages complete sending well before the midnight reset.
+- **Optional Residential Proxy**: Added support for residential proxy configuration via the `TIKTOK_PROXY` environment variable.
 - Reorganized directory structure to use standardized `snake_case` folder and file naming.
 - Consolidated image converters and compressors from `imagConverter/` and `imgCompressor/` into `image_tools/`.
 - Moved standalone scripts from root directory to category folders with descriptive `snake_case` names:

@@ -7,10 +7,18 @@ by sending daily direct messages to friends.
 """
 
 import argparse
+import os
+import random
 import sys
 import time
 from pathlib import Path
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
+
+# Stealth plugin to patch browser fingerprint leaks
+try:
+    from playwright_stealth import stealth_sync
+except ImportError:
+    stealth_sync = None
 
 # Load environment variables if running directly
 try:
@@ -22,6 +30,35 @@ except ImportError:
 SCRIPT_DIR = Path(__file__).resolve().parent
 SESSION_DIR = SCRIPT_DIR / "tiktok_session"
 STATE_FILE = SCRIPT_DIR / "state.json"
+
+# Realistic desktop user agents to rotate through
+_USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+]
+
+# Realistic viewport sizes to randomize
+_VIEWPORTS = [
+    {"width": 1920, "height": 1080},
+    {"width": 1536, "height": 864},
+    {"width": 1440, "height": 900},
+    {"width": 1366, "height": 768},
+    {"width": 1280, "height": 800},
+]
+
+
+def _human_delay(page, min_ms: int = 800, max_ms: int = 2500):
+    """Wait a randomized human-like duration."""
+    page.wait_for_timeout(random.randint(min_ms, max_ms))
+
+
+def _human_pause_between_friends():
+    """Return a gaussian-distributed delay in seconds for pausing between friends."""
+    delay = int(random.gauss(45, 20))
+    return max(15, min(delay, 120))
 
 
 def load_state_from_db() -> str | None:
@@ -201,24 +238,43 @@ def send_streak_messages(friends: list[str] | None, message: str, headed: bool) 
     print(f"Browser mode: {'Headed' if headed else 'Headless'}\n")
 
     with sync_playwright() as p:
-        # Launch Chromium and load context using state.json
-        browser = p.chromium.launch(
-            headless=not headed,
-            args=["--disable-blink-features=AutomationControlled"]
-        )
+        # ── Anti-detection: proxy, user agent, viewport randomization ──
+        launch_args = ["--disable-blink-features=AutomationControlled"]
+        launch_kwargs = {
+            "headless": not headed,
+            "args": launch_args,
+        }
+        # Optional residential proxy via env var (e.g. "http://user:pass@proxy-host:port")
+        proxy_url = os.getenv("TIKTOK_PROXY")
+        if proxy_url:
+            launch_kwargs["proxy"] = {"server": proxy_url}
+            print(f"Using proxy: {proxy_url.split('@')[-1] if '@' in proxy_url else proxy_url}")
+
+        browser = p.chromium.launch(**launch_kwargs)
+
+        viewport = random.choice(_VIEWPORTS)
+        user_agent = random.choice(_USER_AGENTS)
         context = browser.new_context(
             storage_state=STATE_FILE,
-            viewport={"width": 1280, "height": 800}
+            viewport=viewport,
+            user_agent=user_agent,
+            locale="en-US",
+            timezone_id="Asia/Phnom_Penh",
         )
         page = context.new_page()
+
+        # Apply stealth patches if available
+        if stealth_sync:
+            stealth_sync(page)
+            print("Stealth patches applied.")
 
         try:
             print("Navigating to TikTok Messages...")
             page.goto("https://www.tiktok.com/messages", wait_until="load", timeout=30000)
 
-            # Wait for messages page structure to load
+            # Human-like initial wait (3-7 seconds)
             print("Waiting for page load...")
-            page.wait_for_timeout(5000)  # Give it a few seconds to load completely
+            _human_delay(page, 3000, 7000)
 
             # Scroll list container to load all lazy-loaded chats
             try:
@@ -244,10 +300,10 @@ def send_streak_messages(friends: list[str] | None, message: str, headed: bool) 
                     # Scroll down to lazy-load older chats
                     for _ in range(8):
                         container.as_element().evaluate("el => el.scrollTop += el.clientHeight")
-                        page.wait_for_timeout(800)
+                        _human_delay(page, 600, 1500)
                     # Scroll back to top
                     container.as_element().evaluate("el => el.scrollTop = 0")
-                    page.wait_for_timeout(1000)
+                    _human_delay(page, 800, 1800)
                     print("Finished scrolling chat sidebar.")
             except Exception as e:
                 print(f"Warning: Failed to scroll chat list: {e}")
@@ -281,7 +337,6 @@ def send_streak_messages(friends: list[str] | None, message: str, headed: bool) 
 
             # Generate pool of 500 alternative messages
             message_pool = generate_streak_message_pool()
-            import random
 
             # Send messages to the targeted chats
             for item, name in targets:
@@ -308,7 +363,7 @@ def send_streak_messages(friends: list[str] | None, message: str, headed: bool) 
                     # Auto-Detect Mode: we already have the element, click it directly
                     item.click()
 
-                page.wait_for_timeout(2000)  # Wait for chat area to load
+                _human_delay(page, 2000, 5000)  # Wait for chat area to load
 
                 # Locate text box
                 text_input = page.locator(
@@ -324,20 +379,21 @@ def send_streak_messages(friends: list[str] | None, message: str, headed: bool) 
 
                     print(f"Sending message: '{current_message}' to '{name}'...")
                     text_input.click()
+                    _human_delay(page, 500, 1500)  # pause before typing
                     text_input.fill(current_message)
-                    page.wait_for_timeout(1000)
+                    _human_delay(page, 800, 2000)  # pause before pressing enter
                     text_input.press("Enter")
-                    page.wait_for_timeout(2000)  # Wait for message to register
+                    _human_delay(page, 1500, 4000)  # wait for message to register
                     print(f"✅ Message sent successfully to '{name}'!")
                 else:
                     print(f"❌ Error: Chat input box not found for '{name}'.")
                     if not headed:
                         page.screenshot(path=str(SCRIPT_DIR / f"failure_input_{name}.png"))
 
-                # Add human-like delay between sending messages to different friends to avoid bot detection
+                # Gaussian-distributed delay between friends (mean 45s, range 15-120s)
                 if (item, name) != targets[-1]:
-                    sleep_seconds = random.randint(8, 18)
-                    print(f"Waiting {sleep_seconds} seconds before the next friend to look human...")
+                    sleep_seconds = _human_pause_between_friends()
+                    print(f"Waiting {sleep_seconds}s before the next friend...")
                     page.wait_for_timeout(sleep_seconds * 1000)
 
             # Save the updated session state (cookies, local storage) back to state.json and MongoDB
@@ -355,7 +411,7 @@ def send_streak_messages(friends: list[str] | None, message: str, headed: bool) 
                 print("\n=== Checking TikTok Comment Notifications ===")
                 print("Navigating to TikTok Inbox...")
                 page.goto("https://www.tiktok.com/inbox", wait_until="load", timeout=30000)
-                page.wait_for_timeout(5000)
+                _human_delay(page, 3000, 7000)
                 
                 # Check if the inbox panel is already visible. If not, open it.
                 inbox_panel = page.locator('#header-inbox-bar').first
@@ -365,7 +421,7 @@ def send_streak_messages(friends: list[str] | None, message: str, headed: bool) 
                         if inbox_icon.is_visible():
                             print("Inbox dropdown is not visible. Clicking inbox icon in header to open...")
                             inbox_icon.click()
-                            page.wait_for_timeout(3000)
+                            _human_delay(page, 2000, 5000)
                     except Exception as click_err:
                         print(f"Warning: Failed to click inbox icon: {click_err}")
                 else:
@@ -384,7 +440,7 @@ def send_streak_messages(friends: list[str] | None, message: str, headed: bool) 
                         parent = parent.parentElement;
                     }
                 }""")
-                page.wait_for_timeout(2000)
+                _human_delay(page, 1500, 3000)
                 
                 # Click Comments tab
                 print("Selecting Comments tab...")
@@ -398,7 +454,7 @@ def send_streak_messages(friends: list[str] | None, message: str, headed: bool) 
                             const btn = document.getElementById('inbox-tab-2') || document.querySelector('[data-e2e="comments"]');
                             if (btn) btn.click();
                         }""")
-                    page.wait_for_timeout(4000)
+                    _human_delay(page, 3000, 6000)
                 else:
                     print("Comments tab is already active.")
                 
@@ -406,7 +462,7 @@ def send_streak_messages(friends: list[str] | None, message: str, headed: bool) 
                 print("Scrolling to load older comments...")
                 for i in range(5):
                     page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-                    page.wait_for_timeout(1200)
+                    _human_delay(page, 1000, 2500)
                     
                 # Extract all comments notifications
                 notifications = page.evaluate("""() => {
