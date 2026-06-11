@@ -31,7 +31,6 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 SESSION_DIR = SCRIPT_DIR / "tiktok_session"
 STATE_FILE = SCRIPT_DIR / "state.json"
 
-# Realistic desktop user agents to rotate through
 _USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
@@ -40,7 +39,6 @@ _USER_AGENTS = [
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
 ]
 
-# Realistic viewport sizes to randomize
 _VIEWPORTS = [
     {"width": 1920, "height": 1080},
     {"width": 1536, "height": 864},
@@ -51,18 +49,15 @@ _VIEWPORTS = [
 
 
 def _human_delay(page, min_ms: int = 800, max_ms: int = 2500):
-    """Wait a randomized human-like duration."""
     page.wait_for_timeout(random.randint(min_ms, max_ms))
 
 
 def _human_pause_between_friends():
-    """Return a gaussian-distributed delay in seconds for pausing between friends."""
     delay = int(random.gauss(45, 20))
     return max(15, min(delay, 120))
 
 
 def load_state_from_db() -> str | None:
-    """Attempts to connect to MongoDB and retrieve the stored TikTok state JSON."""
     mongo_uri = os.getenv("MONGODB_URI")
     db_name = os.getenv("DB_NAME", "expTracker")
     if not mongo_uri:
@@ -83,7 +78,6 @@ def load_state_from_db() -> str | None:
 
 
 def save_state_to_db(state_json: str) -> None:
-    """Attempts to connect to MongoDB and save the updated TikTok state JSON."""
     mongo_uri = os.getenv("MONGODB_URI")
     db_name = os.getenv("DB_NAME", "expTracker")
     if not mongo_uri:
@@ -104,14 +98,40 @@ def save_state_to_db(state_json: str) -> None:
         print(f"Warning: Failed to save TikTok state to MongoDB: {e}")
 
 
+def load_dynamic_config() -> tuple[list[str], dict]:
+    """Fetches target friends and message components directly from MongoDB."""
+    mongo_uri = os.getenv("MONGODB_URI")
+    db_name = os.getenv("DB_NAME", "expTracker")
+    friends = []
+    components = {}
+
+    if not mongo_uri:
+        return friends, components
+
+    try:
+        from pymongo import MongoClient
+        client = MongoClient(mongo_uri)
+        db = client[db_name]
+
+        f_doc = db["tiktok_settings"].find_one({"key": "target_friends"})
+        if f_doc and "value" in f_doc:
+            friends = f_doc["value"]
+
+        c_doc = db["tiktok_settings"].find_one({"key": "message_components"})
+        if c_doc and "value" in c_doc:
+            components = c_doc["value"]
+
+    except Exception as e:
+        print(f"Warning: Failed to fetch dynamic config from MongoDB: {e}")
+
+    return friends, components
+
+
 def login_mode() -> None:
-    """Launches Chrome in headed mode so the user can log in manually."""
     print("\n=== TikTok Streak Keeper: Login Mode ===")
     print("Launching headed browser. Please log into your TikTok account.")
     print("Once logged in, close the browser window or wait 60 seconds to save session.")
-    print(f"Persistent session will be stored in: {SESSION_DIR}")
-    print(f"State JSON will be exported to: {STATE_FILE}\n")
-
+    
     SESSION_DIR.mkdir(parents=True, exist_ok=True)
 
     with sync_playwright() as p:
@@ -137,42 +157,26 @@ def login_mode() -> None:
 
         browser.storage_state(path=STATE_FILE)
         print(f"\nStorage state exported successfully to: {STATE_FILE}")
-        print("Session saved successfully. You can now run the script in automation mode.")
         browser.close()
 
 
-def generate_streak_message_pool() -> list[str]:
-    """Generates 500 chaotic bilingual (Khmer Romeng / Gen-Z English) messages."""
+def generate_streak_message_pool(db_components: dict) -> list[str]:
+    """Generates 500 combinations using arrays pulled straight from MongoDB."""
     import random
     
-    # Group 1: Greetings & Attention Grabbers
-    greetings = ["yo", "ayo", "alov", "weyy", "hey", "oy", "boss", "bro", "heyyy", "sup", "wassup", "wyd"]
-    
-    # Group 2: Khmer Check-ins & Questions
-    khmer_questions = ["tver ey nv", "hob bay nv", "reply pg", "tv na td", "rean ot td", "mean ey tmey", "sok te", "muy tv"]
-    
-    # Group 3: English Check-ins & Questions
-    eng_questions = ["u good?", "wya", "what's good", "u busy?", "how u been", "surviving?"]
-    
-    # Group 4: Khmer Vibes & Complaints
-    khmer_vibes = ["nguy dek hah", "klen kloun", "ot luy te", "la orn", "chher kbal", "busy mles", "boring hah", "jong tv leng"]
-    
-    # Group 5: English Vibes & Statements
-    eng_vibes = ["im ded", "so tired rn", "cant do this rn", "literally me", "bro im sleep", "im dead", "mood"]
-    
-    # Group 6: Khmer Fillers & Particles
-    khmer_fillers = ["ng eng", "aii", "bat", "ha", "hah", "men ta", "pg", "mles", "der", "nas"]
-    
-    # Group 7: English Slang & Fillers
-    eng_fillers = ["fr", "ngl", "tbh", "lowkey", "highkey", "rn", "bruh", "ong"]
-    
-    # Group 8: Laughs & Sign-offs
-    laughs = ["xD", "xDD", "lol", "lmao", "lmfao", "haha", "hehe", "wkkw", "crying", ""]
+    # Safely pull arrays from DB, with hardcoded fallbacks just in case
+    greetings = db_components.get("greetings", ["yo", "ayo", "alov", "weyy", "hey", "oy", "boss", "bro", "heyyy", "sup", "wassup", "wyd"])
+    khmer_questions = db_components.get("khmer_questions", ["tver ey nv", "hob bay nv", "reply pg", "tv na td", "rean ot td", "mean ey tmey", "sok te", "muy tv"])
+    eng_questions = db_components.get("eng_questions", ["u good?", "wya", "what's good", "u busy?", "how u been", "surviving?"])
+    khmer_vibes = db_components.get("khmer_vibes", ["nguy dek hah", "klen kloun", "ot luy te", "la orn", "chher kbal", "busy mles", "boring hah", "jong tv leng"])
+    eng_vibes = db_components.get("eng_vibes", ["im ded", "so tired rn", "cant do this rn", "literally me", "bro im sleep", "im dead", "mood"])
+    khmer_fillers = db_components.get("khmer_fillers", ["ng eng", "aii", "bat", "ha", "hah", "men ta", "pg", "mles", "der", "nas"])
+    eng_fillers = db_components.get("eng_fillers", ["fr", "ngl", "tbh", "lowkey", "highkey", "rn", "bruh", "ong"])
+    laughs = db_components.get("laughs", ["xD", "xDD", "lol", "lmao", "lmfao", "haha", "hehe", "wkkw", "crying", ""])
     
     pool = set()
     random_gen = random.Random()
     
-    # Generate exactly 500 unique combinations
     while len(pool) < 500:
         g = random_gen.choice(greetings)
         kq = random_gen.choice(khmer_questions)
@@ -183,41 +187,27 @@ def generate_streak_message_pool() -> list[str]:
         ef = random_gen.choice(eng_fillers)
         l = random_gen.choice(laughs)
         
-        # 10 BILINGUAL SENTENCE STRUCTURES
         template = random_gen.choice([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
         
-        if template == 1:
-            msg = f"{kq} {ef} {l}"
-        elif template == 2:
-            msg = f"{g} {ev} {l}"
-        elif template == 3:
-            msg = f"{g} {kv} {kf}"
-        elif template == 4:
-            msg = f"{eq} {ef} {l}"
-        elif template == 5:
-            msg = f"{ev} {l}"
-        elif template == 6:
-            msg = f"{g} {kq} {ef}"
-        elif template == 7:
-            msg = f"{ev} {kf} {l}"
-        elif template == 8:
-            msg = f"{kv} {ef} {l}"
-        elif template == 9:
-            msg = f"{g} {eq}"
-        elif template == 10:
-            msg = f"{kq} {l}"
+        if template == 1: msg = f"{kq} {ef} {l}"
+        elif template == 2: msg = f"{g} {ev} {l}"
+        elif template == 3: msg = f"{g} {kv} {kf}"
+        elif template == 4: msg = f"{eq} {ef} {l}"
+        elif template == 5: msg = f"{ev} {l}"
+        elif template == 6: msg = f"{g} {kq} {ef}"
+        elif template == 7: msg = f"{ev} {kf} {l}"
+        elif template == 8: msg = f"{kv} {ef} {l}"
+        elif template == 9: msg = f"{g} {eq}"
+        elif template == 10: msg = f"{kq} {l}"
             
-        # Clean up weird double spaces or trailing spaces
         msg = " ".join(msg.split()).strip()
-        
         if msg:
             pool.add(msg)
         
     return list(pool)
 
 
-def send_streak_messages(friends: list[str] | None, message: str, headed: bool) -> None:
-    """Loads state, opens TikTok, types realistic human messages, and checks comments."""
+def send_streak_messages(cli_friends: list[str] | None, message: str, headed: bool) -> None:
     import os
     
     state_json_content = load_state_from_db()
@@ -227,40 +217,29 @@ def send_streak_messages(friends: list[str] | None, message: str, headed: bool) 
                 f.write(state_json_content.strip())
             print("Successfully restored session context from MongoDB.")
         except Exception as err:
-            print(f"Warning: Failed to write MongoDB session state to file: {err}")
-    else:
-        state_json_env = os.getenv("TIKTOK_STATE_JSON")
-        if state_json_env:
-            try:
-                with open(STATE_FILE, "w", encoding="utf-8") as f:
-                    f.write(state_json_env.strip())
-                print("Successfully restored session context from env.")
-                save_state_to_db(state_json_env.strip())
-            except Exception as err:
-                print(f"Warning: Failed to restore env state: {err}")
+            pass
 
     if not STATE_FILE.exists():
         print("Error: No active state found. Please run the script in login mode first.")
         sys.exit(1)
 
+    # Load dynamic config from MongoDB
+    db_friends, db_components = load_dynamic_config()
+
     print(f"\n=== TikTok Streak Keeper: Automation Mode ===")
-    if friends:
-        print(f"Target friends (explicit list): {', '.join(friends)}")
-    else:
-        print("Target: All friends with ongoing streaks (Auto-Detect Mode)")
     print(f"Browser mode: {'Headed' if headed else 'Headless'}\n")
 
     with sync_playwright() as p:
-        launch_args = ["--disable-blink-features=AutomationControlled"]
+        launch_args = [
+            "--disable-blink-features=AutomationControlled",
+            "--disable-gpu"
+        ]
         launch_kwargs = {
             "headless": not headed,
             "args": launch_args,
+            "channel": "chrome"
         }
-        proxy_url = os.getenv("TIKTOK_PROXY")
-        if proxy_url:
-            launch_kwargs["proxy"] = {"server": proxy_url}
-            print(f"Using proxy: {proxy_url.split('@')[-1] if '@' in proxy_url else proxy_url}")
-
+        
         browser = p.chromium.launch(**launch_kwargs)
 
         viewport = random.choice(_VIEWPORTS)
@@ -276,18 +255,15 @@ def send_streak_messages(friends: list[str] | None, message: str, headed: bool) 
 
         if stealth_sync:
             stealth_sync(page)
-            print("Stealth patches applied.")
 
         try:
             print("Navigating to TikTok Messages...")
             page.goto("https://www.tiktok.com/messages", wait_until="load", timeout=30000)
-            print("Waiting for page load...")
             _human_delay(page, 3000, 7000)
 
             try:
                 first_item = page.locator('[data-e2e="dm-new-conversation-item"]').first
                 first_item.wait_for(state="visible", timeout=10000)
-                print("Scrolling chat sidebar to load all conversation items...")
                 container = page.evaluate_handle(
                     """() => {
                         const item = document.querySelector('[data-e2e="dm-new-conversation-item"]');
@@ -295,9 +271,7 @@ def send_streak_messages(friends: list[str] | None, message: str, headed: bool) 
                         let parent = item.parentElement;
                         while (parent) {
                             const style = window.getComputedStyle(parent);
-                            if (style.overflowY === 'auto' || style.overflowY === 'scroll') {
-                                return parent;
-                            }
+                            if (style.overflowY === 'auto' || style.overflowY === 'scroll') return parent;
                             parent = parent.parentElement;
                         }
                         return null;
@@ -309,21 +283,29 @@ def send_streak_messages(friends: list[str] | None, message: str, headed: bool) 
                         _human_delay(page, 600, 1500)
                     container.as_element().evaluate("el => el.scrollTop = 0")
                     _human_delay(page, 800, 1800)
-                    print("Finished scrolling chat sidebar.")
-            except Exception as e:
-                print(f"Warning: Failed to scroll chat list: {e}")
+            except Exception:
+                pass
 
             targets = []
-            if friends:
-                for friend in friends:
+            if cli_friends:
+                print(f"Target friends (CLI override): {', '.join(cli_friends)}")
+                for friend in cli_friends:
+                    targets.append((None, friend))
+            elif db_friends:
+                print(f"Target friends (Loaded from MongoDB): {', '.join(db_friends)}")
+                for friend in db_friends:
                     targets.append((None, friend))
             else:
-                print("Defaulting to hardcoded fallback list.")
-                default_friends = ["Ling令", "Estelle", "សមាគមន៍យុវជនប្រឆាំងនឹងសុរ៉ា", "janthedumbie", "tov c ey ✨", "កូនអញកើតម៉ោឪ្យហៅហែងប៉ា", "Hazelnut", "Larry"]
-                for friend in default_friends:
+                print("Target friends (Hardcoded fallback): Ling令, Estelle, etc...")
+                fallback_friends = ["Ling令", "Estelle", "សមាគមន៍យុវជនប្រឆាំងនឹងសុរ៉ា", "janthedumbie", "tov c ey ✨", "កូនអញកើតម៉ោឪ្យហៅហែងប៉ា", "Hazelnut", "Larry"]
+                for friend in fallback_friends:
                     targets.append((None, friend))
 
-            message_pool = generate_streak_message_pool()
+            # Randomize the sending order
+            random.shuffle(targets)
+
+            # Generate messages using MongoDB components
+            message_pool = generate_streak_message_pool(db_components)
 
             for item, name in targets:
                 print(f"\nProcessing chat with: '{name}'...")
@@ -337,7 +319,6 @@ def send_streak_messages(friends: list[str] | None, message: str, headed: bool) 
                         chat_item = page.get_by_text(name, exact=False).first
 
                     if chat_item.is_visible():
-                        print(f"Found chat for '{name}'. Clicking to open...")
                         chat_item.click()
                     else:
                         print(f"❌ Error: Could not locate chat item for '{name}'.")
@@ -361,7 +342,6 @@ def send_streak_messages(friends: list[str] | None, message: str, headed: bool) 
                     text_input.click()
                     _human_delay(page, 500, 1500)
                     
-                    # TYPE LIKE A HUMAN: Letter by letter with a random delay between keystrokes
                     keystroke_delay = random.randint(40, 110)
                     text_input.press_sequentially(current_message, delay=keystroke_delay)
                     
@@ -379,12 +359,11 @@ def send_streak_messages(friends: list[str] | None, message: str, headed: bool) 
 
             try:
                 context.storage_state(path=STATE_FILE)
-                print(f"Updated storage state written to {STATE_FILE}")
                 with open(STATE_FILE, "r", encoding="utf-8") as f:
                     updated_state = f.read()
                 save_state_to_db(updated_state)
-            except Exception as e:
-                print(f"Warning: Failed to save updated storage state to MongoDB: {e}")
+            except Exception:
+                pass
 
             # Inbox Notifications Parsing Block
             try:
@@ -499,7 +478,7 @@ def send_streak_messages(friends: list[str] | None, message: str, headed: bool) 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Automate sending direct messages on TikTok.")
     parser.add_argument("--login", action="store_true", help="Run script in login mode.")
-    parser.add_argument("--friend", action="append", help="Friend's display name to message.")
+    parser.add_argument("--friend", action="append", help="Friend's display name to message. Overrides MongoDB.")
     parser.add_argument("--message", default="Streak!", help="Custom message (default triggers dynamic pool).")
     parser.add_argument("--headed", action="store_true", help="Run browser visibly.")
     args = parser.parse_args()
