@@ -7,8 +7,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- Created `social_tools/tiktok_streak_keeper.py`, a browser automation utility using Playwright to log in and send direct messages to specified friends to maintain TikTok streaks.
 - Created `document_converters/pdf_merger.py`, a command line utility to merge multiple PDF files.
-- Added `pypdf` dependency to virtual environment and registered it in `requirements.txt`.
+- Added `pypdf` and `playwright` dependencies to virtual environment and registered them in `requirements.txt`.
 
 ### Changed
 - Reorganized directory structure to use standardized `snake_case` folder and file naming.
