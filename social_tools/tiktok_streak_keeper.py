@@ -273,6 +273,21 @@ def send_streak_messages(cli_friends: list[str] | None, message: str, headed: bo
                 except Exception as e:
                     print(f"Warning: Failed to capture screenshot {step_name}: {e}")
 
+            # Aggressively spoof Mac fingerprint to match the User-Agent
+            page.add_init_script("""
+                Object.defineProperty(navigator, 'platform', { get: () => 'MacIntel' });
+                Object.defineProperty(navigator, 'vendor', { get: () => 'Google Inc.' });
+                Object.defineProperty(navigator, 'oscpu', { get: () => 'Intel Mac OS X 10_15_7' });
+                
+                // Overwrite webdriver
+                Object.defineProperty(navigator, 'webdriver', { get: () => false });
+                
+                // Spoof plugins to look like a real Chrome browser
+                Object.defineProperty(navigator, 'plugins', {
+                    get: () => [1, 2, 3, 4, 5] // Just needs to have length > 0
+                });
+            """)
+
             print("Navigating to TikTok Messages...")
             page.goto("https://www.tiktok.com/messages", wait_until="domcontentloaded", timeout=30000)
             _human_delay(page, 5000, 8000)
