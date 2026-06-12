@@ -349,7 +349,7 @@ def send_streak_messages(cli_friends: list[str] | None, message: str, headed: bo
             is_session_valid = False
             try:
                 first_item = page.locator('[data-e2e="dm-new-conversation-item"]').first
-                first_item.wait_for(state="visible", timeout=10000)
+                first_item.wait_for(state="visible", timeout=30000)
                 is_session_valid = True
                 container = page.evaluate_handle(
                     """() => {
@@ -403,8 +403,17 @@ def send_streak_messages(cli_friends: list[str] | None, message: str, headed: bo
                         '[data-e2e="dm-new-conversation-item"], [data-e2e="message-chat-item"], div[class*="ChatItem"], a[href*="/messages"]'
                     ).filter(has_text=name).first
 
+                    try:
+                        chat_item.wait_for(state="visible", timeout=15000)
+                    except Exception:
+                        pass
+
                     if not chat_item.is_visible():
                         chat_item = page.get_by_text(name, exact=False).first
+                        try:
+                            chat_item.wait_for(state="visible", timeout=5000)
+                        except Exception:
+                            pass
 
                     if chat_item.is_visible():
                         chat_item.click()
