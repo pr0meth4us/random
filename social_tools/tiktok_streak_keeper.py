@@ -250,8 +250,8 @@ def send_streak_messages(cli_friends: list[str] | None, message: str, headed: bo
         
         browser = p.chromium.launch(**launch_kwargs)
 
-        viewport = random.choice(_VIEWPORTS)
-        user_agent = random.choice(_USER_AGENTS)
+        viewport = {"width": 1280, "height": 800}
+        user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
         context = browser.new_context(
             storage_state=STATE_FILE,
             viewport=viewport,
