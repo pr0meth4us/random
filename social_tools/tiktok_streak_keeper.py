@@ -135,12 +135,23 @@ def login_mode() -> None:
     SESSION_DIR.mkdir(parents=True, exist_ok=True)
 
     with sync_playwright() as p:
-        browser = p.chromium.launch_persistent_context(
-            user_data_dir=SESSION_DIR,
-            headless=False,
-            viewport={"width": 1280, "height": 800},
-            args=["--disable-blink-features=AutomationControlled"],
-        )
+        launch_kwargs = {
+            "user_data_dir": SESSION_DIR,
+            "headless": False,
+            "viewport": {"width": 1280, "height": 800},
+            "args": ["--disable-blink-features=AutomationControlled"],
+        }
+
+        proxy_server = os.getenv("PROXY_SERVER")
+        if proxy_server:
+            launch_kwargs["proxy"] = {"server": proxy_server}
+            proxy_username = os.getenv("PROXY_USERNAME")
+            proxy_password = os.getenv("PROXY_PASSWORD")
+            if proxy_username and proxy_password:
+                launch_kwargs["proxy"]["username"] = proxy_username
+                launch_kwargs["proxy"]["password"] = proxy_password
+
+        browser = p.chromium.launch_persistent_context(**launch_kwargs)
 
         page = browser.pages[0]
         page.goto("https://www.tiktok.com/")
@@ -248,6 +259,15 @@ def send_streak_messages(cli_friends: list[str] | None, message: str, headed: bo
         # Only force the Mac Google Chrome app if we are debugging visibly.
         if headed:
             launch_kwargs["channel"] = "chrome"
+            
+        proxy_server = os.getenv("PROXY_SERVER")
+        if proxy_server:
+            launch_kwargs["proxy"] = {"server": proxy_server}
+            proxy_username = os.getenv("PROXY_USERNAME")
+            proxy_password = os.getenv("PROXY_PASSWORD")
+            if proxy_username and proxy_password:
+                launch_kwargs["proxy"]["username"] = proxy_username
+                launch_kwargs["proxy"]["password"] = proxy_password
         
         browser = p.chromium.launch(**launch_kwargs)
 
