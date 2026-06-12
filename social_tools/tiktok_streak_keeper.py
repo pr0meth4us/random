@@ -445,7 +445,7 @@ def send_streak_messages(cli_friends: list[str] | None, message: str, headed: bo
             # Inbox Notifications Parsing Block
             try:
                 print("\n=== Checking TikTok Comment Notifications ===")
-                page.goto("https://www.tiktok.com/inbox", wait_until="load", timeout=30000)
+                page.goto("https://www.tiktok.com/inbox", wait_until="domcontentloaded", timeout=30000)
                 _human_delay(page, 3000, 7000)
                 
                 inbox_panel = page.locator('#header-inbox-bar').first
