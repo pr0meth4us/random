@@ -241,17 +241,20 @@ def send_streak_messages(cli_friends: list[str] | None, message: str, headed: bo
     print(f"Browser mode: {'Headed' if headed else 'Headless'}\n")
 
     with sync_playwright() as p:
-        launch_args = [
-            "--disable-blink-features=AutomationControlled",
-            "--no-sandbox",               # 👈 Critical for Linux Cloud containers
-            "--disable-dev-shm-usage",    # 👈 Stops Chrome from crashing due to low RAM
-            "--disable-setuid-sandbox",
-            "--disable-extensions",       # 👈 Saves memory by turning off extensions
-            "--js-flags=--max-old-space-size=256" # 👈 Forces Chrome to use less RAM
-        ]
-        
-        if not headed:
-            launch_args.append("--disable-gpu")
+        if headed:
+            launch_args = [
+                "--disable-blink-features=AutomationControlled",
+            ]
+        else:
+            launch_args = [
+                "--disable-blink-features=AutomationControlled",
+                "--disable-gpu",
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-setuid-sandbox",
+                "--disable-extensions",
+                "--js-flags=--max-old-space-size=256"
+            ]
         launch_kwargs = {
             "headless": not headed,
             "args": launch_args,
@@ -284,17 +287,9 @@ def send_streak_messages(cli_friends: list[str] | None, message: str, headed: bo
         )
         page = context.new_page()
 
-        if stealth_sync:
-            stealth_sync(page)
-
-        try:
-            def _take_screenshot(step_name: str):
-                ss_path = os.path.abspath(f"tiktok_debug_{step_name}.png")
-                try:
-                    page.screenshot(path=ss_path)
-                    print(f"SCREENSHOT_SAVED:{ss_path}")
-                except Exception as e:
-                    print(f"Warning: Failed to capture screenshot {step_name}: {e}")
+        if not headed:
+            if stealth_sync:
+                stealth_sync(page)
 
             # Aggressively spoof Mac fingerprint to match the User-Agent and localStorage state
             page.add_init_script("""
@@ -319,6 +314,15 @@ def send_streak_messages(cli_friends: list[str] | None, message: str, headed: bo
                     return getParameter.call(this, parameter);
                 };
             """)
+
+        try:
+            def _take_screenshot(step_name: str):
+                ss_path = os.path.abspath(f"tiktok_debug_{step_name}.png")
+                try:
+                    page.screenshot(path=ss_path)
+                    print(f"SCREENSHOT_SAVED:{ss_path}")
+                except Exception as e:
+                    print(f"Warning: Failed to capture screenshot {step_name}: {e}")
 
             print("Navigating to TikTok Messages...")
             page.goto("https://www.tiktok.com/messages", wait_until="domcontentloaded", timeout=30000)
