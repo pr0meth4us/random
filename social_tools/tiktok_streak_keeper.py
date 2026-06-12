@@ -274,8 +274,15 @@ def send_streak_messages(cli_friends: list[str] | None, message: str, headed: bo
                     print(f"Warning: Failed to capture screenshot {step_name}: {e}")
 
             print("Navigating to TikTok Messages...")
-            page.goto("https://www.tiktok.com/messages", wait_until="load", timeout=30000)
-            _human_delay(page, 3000, 7000)
+            page.goto("https://www.tiktok.com/messages", wait_until="domcontentloaded", timeout=30000)
+            _human_delay(page, 5000, 8000)
+            
+            # Print page title and length of HTML to see if we got blocked
+            html_content = page.content()
+            print(f"DEBUG: Page Title = '{page.title()}'")
+            print(f"DEBUG: HTML Content Length = {len(html_content)} bytes")
+            if len(html_content) < 1000:
+                print(f"DEBUG: HTML Content snippet = {html_content[:500]}")
             
             _take_screenshot("1_initial_load")
 
