@@ -283,6 +283,15 @@ def send_streak_messages(cli_friends: list[str] | None, message: str, headed: bo
             print(f"DEBUG: HTML Content Length = {len(html_content)} bytes")
             if len(html_content) < 1000:
                 print(f"DEBUG: HTML Content snippet = {html_content[:500]}")
+                
+            # Save HTML to a file for Telegram delivery
+            html_path = os.path.abspath("tiktok_debug.html")
+            try:
+                with open(html_path, "w", encoding="utf-8") as f:
+                    f.write(html_content)
+                print(f"HTML_SAVED:{html_path}")
+            except Exception as e:
+                print(f"Warning: Failed to save HTML dump: {e}")
             
             _take_screenshot("1_initial_load")
 
