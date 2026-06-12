@@ -11,8 +11,19 @@ import os
 import random
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
+
+try:
+    import pytz
+except ImportError:
+    pytz = None
+
+try:
+    import markovify
+except ImportError:
+    markovify = None
 
 # Stealth plugin to patch browser fingerprint leaks
 try:
@@ -98,15 +109,16 @@ def save_state_to_db(state_json: str) -> None:
         print(f"Warning: Failed to save TikTok state to MongoDB: {e}")
 
 
-def load_dynamic_config() -> tuple[list[str], dict]:
-    """Fetches target friends and message components directly from MongoDB."""
+def load_dynamic_config() -> tuple[list[str], dict, dict]:
+    """Fetches target friends, message components, and Markov models directly from MongoDB."""
     mongo_uri = os.getenv("MONGODB_URI")
     db_name = os.getenv("DB_NAME", "expTracker")
     friends = []
     components = {}
+    markov_models = {}
 
     if not mongo_uri:
-        return friends, components
+        return friends, components, markov_models
 
     try:
         from pymongo import MongoClient
@@ -121,10 +133,14 @@ def load_dynamic_config() -> tuple[list[str], dict]:
         if c_doc and "value" in c_doc:
             components = c_doc["value"]
 
+        m_doc = db["tiktok_settings"].find_one({"key": "markov_vibe_models"})
+        if m_doc and "value" in m_doc:
+            markov_models = m_doc["value"]
+
     except Exception as e:
         print(f"Warning: Failed to fetch dynamic config from MongoDB: {e}")
 
-    return friends, components
+    return friends, components, markov_models
 
 
 def login_mode() -> None:
@@ -171,51 +187,101 @@ def login_mode() -> None:
         browser.close()
 
 
-def generate_streak_message_pool(db_components: dict) -> list[str]:
-    """Generates 500 combinations using arrays pulled straight from MongoDB."""
-    import random
+def generate_streak_message(db_components: dict, markov_models: dict) -> str:
+    """Generates a highly creative, vibe-tagged, time-aware message using Markov chains or a robust fallback."""
+    timezone_str = os.getenv("TIMEZONE", "Asia/Phnom_Penh")
+    if pytz:
+        try:
+            tz = pytz.timezone(timezone_str)
+            now = datetime.now(tz)
+        except Exception:
+            now = datetime.now()
+    else:
+        now = datetime.now()
+
+    # Determine time of day
+    hour = now.hour
+    if 5 <= hour < 12:
+        time_context = "morning"
+    elif 12 <= hour < 18:
+        time_context = "day"
+    else:
+        time_context = "night"
+
+    # Select Vibe
+    vibes = ["hype", "exhausted", "chill", "annoyed"]
+    selected_vibe = random.choice(vibes)
     
-    # Safely pull arrays from DB, with hardcoded fallbacks just in case
-    greetings = db_components.get("greetings", ["yo", "ayo", "alov", "weyy", "hey", "oy", "boss", "bro", "heyyy", "sup", "wassup", "wyd"])
-    khmer_questions = db_components.get("khmer_questions", ["tver ey nv", "hob bay nv", "reply pg", "tv na td", "rean ot td", "mean ey tmey", "sok te", "muy tv"])
-    eng_questions = db_components.get("eng_questions", ["u good?", "wya", "what's good", "u busy?", "how u been", "surviving?"])
-    khmer_vibes = db_components.get("khmer_vibes", ["nguy dek hah", "klen kloun", "ot luy te", "la orn", "chher kbal", "busy mles", "boring hah", "jong tv leng"])
-    eng_vibes = db_components.get("eng_vibes", ["im ded", "so tired rn", "cant do this rn", "literally me", "bro im sleep", "im dead", "mood"])
-    khmer_fillers = db_components.get("khmer_fillers", ["ng eng", "aii", "bat", "ha", "hah", "men ta", "pg", "mles", "der", "nas"])
-    eng_fillers = db_components.get("eng_fillers", ["fr", "ngl", "tbh", "lowkey", "highkey", "rn", "bruh", "ong"])
-    laughs = db_components.get("laughs", ["xD", "xDD", "lol", "lmao", "lmfao", "haha", "hehe", "wkkw", "crying", ""])
-    
-    pool = set()
-    random_gen = random.Random()
-    
-    while len(pool) < 500:
-        g = random_gen.choice(greetings)
-        kq = random_gen.choice(khmer_questions)
-        eq = random_gen.choice(eng_questions)
-        kv = random_gen.choice(khmer_vibes)
-        ev = random_gen.choice(eng_vibes)
-        kf = random_gen.choice(khmer_fillers)
-        ef = random_gen.choice(eng_fillers)
-        l = random_gen.choice(laughs)
-        
-        template = random_gen.choice([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
-        
-        if template == 1: msg = f"{kq} {ef} {l}"
-        elif template == 2: msg = f"{g} {ev} {l}"
-        elif template == 3: msg = f"{g} {kv} {kf}"
-        elif template == 4: msg = f"{eq} {ef} {l}"
-        elif template == 5: msg = f"{ev} {l}"
-        elif template == 6: msg = f"{g} {kq} {ef}"
-        elif template == 7: msg = f"{ev} {kf} {l}"
-        elif template == 8: msg = f"{kv} {ef} {l}"
-        elif template == 9: msg = f"{g} {eq}"
-        elif template == 10: msg = f"{kq} {l}"
+    print(f"Determined Time Context: {time_context.upper()} (Hour: {hour})")
+    print(f"Selected Message Vibe: {selected_vibe.upper()}")
+
+    # Try to generate using markovify
+    if markovify and markov_models:
+        try:
+            vibe_json = markov_models.get(selected_vibe)
+            time_json = markov_models.get(time_context)
             
-        msg = " ".join(msg.split()).strip()
-        if msg:
-            pool.add(msg)
-        
-    return list(pool)
+            if vibe_json and time_json:
+                vibe_model = markovify.NewlineText.from_json(vibe_json)
+                time_model = markovify.NewlineText.from_json(time_json)
+                # Combine both models
+                combined_model = markovify.combine([vibe_model, time_model], [0.6, 0.4])
+                
+                # Generate sentence
+                msg = None
+                for _ in range(20):
+                    msg = combined_model.make_sentence(tries=20)
+                    if msg:
+                        break
+                
+                if msg:
+                    # Let's inject real-world context occasionally
+                    weekday = now.strftime("%A").lower()
+                    if weekday in ["monday", "friday", "saturday", "sunday"] and random.random() < 0.4:
+                        if weekday == "monday":
+                            msg += f" (monday grind is real)"
+                        elif weekday in ["friday", "saturday"]:
+                            msg += f" (weekend vibes fr)"
+                        elif weekday == "sunday":
+                            msg += f" (sunday scaries lmfao)"
+                    return msg
+        except Exception as e:
+            print(f"Warning: Markov generation failed: {e}. Falling back to template generation.")
+
+    # Fallback to a high-quality pool of template messages
+    fallbacks = {
+        "hype": [
+            "omg today is going to be so good let's gooooo fr fr",
+            "vibes slh today ngl, best day ever",
+            "pruous mode fully activated wtf xD",
+            "slh nas oy excited hhhhh let's win today boss",
+            "we are so back omg let's do this thing"
+        ],
+        "exhausted": [
+            "im literally ded lowkey so tired rn wtf",
+            "nguy dek hah fr need 10 hours of sleep tbh",
+            "my brain is actually lagging lol physically here mentally asleep",
+            "chher kbal mles today lagging so hard today help",
+            "tired mles hz oy 😭 im dead sleep time soon"
+        ],
+        "chill": [
+            "just chilling hbu, sok te tver ey nv?",
+            "what's good today lol chill chill no stress",
+            "hob bay nv bro? nothing much just relaxing",
+            "taking it easy ngl, vibing and doing nothing",
+            "how u been lately u good? what's up"
+        ],
+        "annoyed": [
+            "reply pg wya busy mles wtf",
+            "literally ignoring me smh don't ignore the streak bro",
+            "ong u lagging on reply why so slow to reply",
+            "bruh wtf is this reply fast pg",
+            "wya chat is dead oy reply pg ng eng"
+        ]
+    }
+    
+    # Pick a random fallback from the selected vibe
+    return random.choice(fallbacks.get(selected_vibe, fallbacks["chill"]))
 
 
 def send_streak_messages(cli_friends: list[str] | None, message: str, headed: bool) -> None:
@@ -235,7 +301,7 @@ def send_streak_messages(cli_friends: list[str] | None, message: str, headed: bo
         sys.exit(1)
 
     # Load dynamic config from MongoDB
-    db_friends, db_components = load_dynamic_config()
+    db_friends, db_components, db_markov = load_dynamic_config()
 
     print(f"\n=== TikTok Streak Keeper: Automation Mode ===")
     print(f"Browser mode: {'Headed' if headed else 'Headless'}\n")
@@ -367,8 +433,7 @@ def send_streak_messages(cli_friends: list[str] | None, message: str, headed: bo
             # Randomize the sending order
             random.shuffle(targets)
 
-            # Generate messages using MongoDB components
-            message_pool = generate_streak_message_pool(db_components)
+            # Generating message is now done dynamically per-friend.
 
             for item, name in targets:
                 print(f"\nProcessing chat with: '{name}'...")
@@ -407,7 +472,7 @@ def send_streak_messages(cli_friends: list[str] | None, message: str, headed: bo
 
                 if text_input.is_visible():
                     if message == "Streak!":
-                        current_message = random.choice(message_pool)
+                        current_message = generate_streak_message(db_components, db_markov)
                     else:
                         current_message = message
 
