@@ -248,12 +248,9 @@ def send_streak_messages(cli_friends: list[str] | None, message: str, headed: bo
         else:
             launch_args = [
                 "--disable-blink-features=AutomationControlled",
-                "--disable-gpu",
                 "--no-sandbox",
                 "--disable-dev-shm-usage",
                 "--disable-setuid-sandbox",
-                "--disable-extensions",
-                "--js-flags=--max-old-space-size=256"
             ]
         launch_kwargs = {
             "headless": not headed,
@@ -291,29 +288,7 @@ def send_streak_messages(cli_friends: list[str] | None, message: str, headed: bo
             if stealth_sync:
                 stealth_sync(page)
 
-            # Aggressively spoof Mac fingerprint to match the User-Agent and localStorage state
-            page.add_init_script("""
-                Object.defineProperty(navigator, 'platform', { get: () => 'MacIntel' });
-                Object.defineProperty(navigator, 'vendor', { get: () => 'Google Inc.' });
-                Object.defineProperty(navigator, 'oscpu', { get: () => 'Intel Mac OS X 10_15_7' });
-                Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 8 });
-                
-                // Overwrite webdriver
-                Object.defineProperty(navigator, 'webdriver', { get: () => false });
-                
-                // Spoof plugins to look like a real Chrome browser
-                Object.defineProperty(navigator, 'plugins', {
-                    get: () => [1, 2, 3, 4, 5] // Just needs to have length > 0
-                });
-                
-                // Spoof WebGL
-                const getParameter = WebGLRenderingContext.prototype.getParameter;
-                WebGLRenderingContext.prototype.getParameter = function(parameter) {
-                    if (parameter === 37445) return 'Google Inc. (Apple)'; // UNMASKED_VENDOR_WEBGL
-                    if (parameter === 37446) return 'Apple M1'; // UNMASKED_RENDERER_WEBGL
-                    return getParameter.call(this, parameter);
-                };
-            """)
+
 
         try:
             def _take_screenshot(step_name: str):
