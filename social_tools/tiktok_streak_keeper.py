@@ -342,9 +342,11 @@ def send_streak_messages(cli_friends: list[str] | None, message: str, headed: bo
             
             _take_screenshot("1_initial_load")
 
+            is_session_valid = False
             try:
                 first_item = page.locator('[data-e2e="dm-new-conversation-item"]').first
                 first_item.wait_for(state="visible", timeout=10000)
+                is_session_valid = True
                 container = page.evaluate_handle(
                     """() => {
                         const item = document.querySelector('[data-e2e="dm-new-conversation-item"]');
@@ -440,13 +442,17 @@ def send_streak_messages(cli_friends: list[str] | None, message: str, headed: bo
                     print(f"Waiting {sleep_seconds}s before the next friend...")
                     page.wait_for_timeout(sleep_seconds * 1000)
 
-            try:
-                context.storage_state(path=STATE_FILE)
-                with open(STATE_FILE, "r", encoding="utf-8") as f:
-                    updated_state = f.read()
-                save_state_to_db(updated_state)
-            except Exception:
-                pass
+            if is_session_valid:
+                try:
+                    context.storage_state(path=STATE_FILE)
+                    with open(STATE_FILE, "r", encoding="utf-8") as f:
+                        updated_state = f.read()
+                    save_state_to_db(updated_state)
+                    print("✅ Session validated! Saved refreshed cookies to MongoDB.")
+                except Exception:
+                    pass
+            else:
+                print("⚠️ Session could not be validated (possibly logged out or hit a captcha). Skipping session save to protect your working cookies!")
 
             # Inbox Notifications Parsing Block
             try:
