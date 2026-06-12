@@ -243,13 +243,15 @@ def send_streak_messages(cli_friends: list[str] | None, message: str, headed: bo
     with sync_playwright() as p:
         launch_args = [
             "--disable-blink-features=AutomationControlled",
-            "--disable-gpu",
             "--no-sandbox",               # 👈 Critical for Linux Cloud containers
             "--disable-dev-shm-usage",    # 👈 Stops Chrome from crashing due to low RAM
             "--disable-setuid-sandbox",
             "--disable-extensions",       # 👈 Saves memory by turning off extensions
             "--js-flags=--max-old-space-size=256" # 👈 Forces Chrome to use less RAM
         ]
+        
+        if not headed:
+            launch_args.append("--disable-gpu")
         launch_kwargs = {
             "headless": not headed,
             "args": launch_args,
