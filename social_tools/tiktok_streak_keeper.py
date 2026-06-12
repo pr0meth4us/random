@@ -259,8 +259,8 @@ def send_streak_messages(cli_friends: list[str] | None, message: str, headed: bo
         }
         
         # Only force the Mac Google Chrome app if we are debugging visibly.
-        if headed:
-            launch_kwargs["channel"] = "chrome"
+        # if headed:
+        #     launch_kwargs["channel"] = "chrome"
             
         proxy_server = os.getenv("PROXY_SERVER")
         if proxy_server:
