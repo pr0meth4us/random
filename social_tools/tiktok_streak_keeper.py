@@ -481,7 +481,7 @@ def send_streak_messages(cli_friends: list[str] | None, message: str, headed: bo
                     _human_delay(page, 500, 1500)
                     
                     keystroke_delay = random.randint(40, 110)
-                    text_input.press_sequentially(current_message, delay=keystroke_delay)
+                    text_input.press_sequentially(current_message, delay=keystroke_delay, timeout=120000)
                     
                     _human_delay(page, 800, 2000)
                     text_input.press("Enter")
