@@ -265,9 +265,19 @@ def send_streak_messages(cli_friends: list[str] | None, message: str, headed: bo
             stealth_sync(page)
 
         try:
+            def _take_screenshot(step_name: str):
+                ss_path = os.path.abspath(f"tiktok_debug_{step_name}.png")
+                try:
+                    page.screenshot(path=ss_path)
+                    print(f"SCREENSHOT_SAVED:{ss_path}")
+                except Exception as e:
+                    print(f"Warning: Failed to capture screenshot {step_name}: {e}")
+
             print("Navigating to TikTok Messages...")
             page.goto("https://www.tiktok.com/messages", wait_until="load", timeout=30000)
             _human_delay(page, 3000, 7000)
+            
+            _take_screenshot("1_initial_load")
 
             try:
                 first_item = page.locator('[data-e2e="dm-new-conversation-item"]').first
@@ -291,6 +301,7 @@ def send_streak_messages(cli_friends: list[str] | None, message: str, headed: bo
                         _human_delay(page, 600, 1500)
                     container.as_element().evaluate("el => el.scrollTop = 0")
                     _human_delay(page, 800, 1800)
+                    _take_screenshot("2_after_scrolling")
             except Exception:
                 pass
 
@@ -330,6 +341,7 @@ def send_streak_messages(cli_friends: list[str] | None, message: str, headed: bo
                         chat_item.click()
                     else:
                         print(f"❌ Error: Could not locate chat item for '{name}'.")
+                        _take_screenshot(f"error_locating_chat_{name}")
                         continue
                 else:
                     item.click()
