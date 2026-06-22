@@ -1,0 +1,15 @@
+code_merger/combined_files.txt
+.idea
+.env
+*.imi
+credentials.json
+ocr_tools/results/*
+image_tools/photos/*
+.DS_Store
+__pycache__/
+*.py[cod]
+*$py.class
+spot_the_difference/*_fixed.jpg
+social_tools/tiktok_session/
+social_tools/state.json
+*bifrost_cache.json
