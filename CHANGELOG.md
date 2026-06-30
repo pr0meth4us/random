@@ -7,6 +7,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- Created `mac-cleaner` folder containing a CleanMyMac-inspired storage cleaner application.
+  - Built a Python FastAPI backend for recursively scanning specific directories (`~/Library/Caches`, `.npm`, `~/.Trash`).
+  - Built a React + Vite frontend with glassmorphism UI, a central storage visualizer gauge, and action controls to safely delete files.
+  - Implemented a Space Lens feature to inspect the sizes of arbitrary folders on the local system.
+  - Implemented an MD5-based duplicate file scanner that detects and groups identical files over 1MB, automatically keeping one copy safe.
+  - Added warning labels and safe defaults for developer caches (`pip`, `npm`, `ms-playwright`).
+
+### Added
+- Created `image_tools/generate_qr.py` as a standalone command line tool to generate QR codes with custom styling options. Added `qrcode` to dependencies.
 - **Synchronous Config Pull**: Embedded Bifrost SDK directly into `bifrost_config.py` to synchronously pull and inject API keys straight into local memory at boot, removing the need for `bifrost_local.py` or webhook servers.
 
 ### Added
