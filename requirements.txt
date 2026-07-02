@@ -39,6 +39,7 @@ jmespath==1.1.0
 joblib==1.5.3
 lazy-loader==0.5
 lxml==6.0.2
+markovify==0.9.4
 MarkupSafe==3.0.3
 narwhals==2.22.1
 networkx==3.6.1
@@ -64,6 +65,7 @@ python-dateutil==2.9.0.post0
 python-docx==1.2.0
 python-dotenv==1.2.2
 PyYAML==6.0.3
+qrcode==8.2
 requests==2.33.1
 s3transfer==0.18.0
 scikit-image==0.26.0
@@ -81,8 +83,8 @@ tqdm==4.68.1
 typing==3.7.4.3
 typing-inspection==0.4.2
 typing_extensions==4.15.0
+Unidecode==1.4.0
 urllib3==2.6.3
 websockets==16.0
 Werkzeug==3.1.8
 yt-dlp==2026.3.17
-markovify==0.9.4

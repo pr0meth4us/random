@@ -23,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Created `Dockerfile` in the workspace root for containerized deployment (e.g. on Koyeb).
 - Created `social_tools/tiktok_streak_keeper.py`, a browser automation utility using Playwright to automatically detect and message all friends with active streaks (or specified friends) to maintain them.
 - Created `document_converters/pdf_merger.py`, a command line utility to merge multiple PDF files.
+- Generalized `document_converters/pdf_extract_page.py` to allow extracting specific pages or page ranges using the `-p` flag.
 - Added `pypdf` and `playwright` dependencies to virtual environment and registered them in `requirements.txt`.
 
 ### Changed
