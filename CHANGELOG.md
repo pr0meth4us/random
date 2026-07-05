@@ -7,6 +7,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- Added `image_tools/enterprisedigital_qr.png` and standard code assets.
+- Added `developer_reimplementation_prompt.md` document draft.
+- Added `patch.py` utility patch script.
+- Added `bkd.txt` and `IMG_4633.HEIC` diagnostic testing inputs.
 - Created `mac-cleaner` folder containing a CleanMyMac-inspired storage cleaner application.
   - Built a Python FastAPI backend for recursively scanning specific directories (`~/Library/Caches`, `.npm`, `~/.Trash`).
   - Built a React + Vite frontend with glassmorphism UI, a central storage visualizer gauge, and action controls to safely delete files.
