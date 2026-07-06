@@ -7,7 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Changed
-- **Bifrost Integration**: Consolidated local `utils/bifrost_config.py` into a redirection proxy to consume the central client SDK.
+- **Bifrost Integration**: Consolidated local `utils/bifrost_config.py` into a redirection proxy to consume the central client SDK, and refactored it with a hybrid local-prod resolver that queries the live API directly when local workspace paths are absent.
 
 ### Added
 - Added `image_tools/enterprisedigital_qr.png` and standard code assets.
