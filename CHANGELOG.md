@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+- **PowerPoint Presentation Review**:
+  - Created batch scripts `scratch/inspect_pptx.py`, `scratch/review_text_slides.py`, and `scratch/review_image_slides.py` to analyze 123 slides of `EGD_Slide Presentaton_DA5.pptx` for typos, grammar, and translation issues.
+  - Created `scratch/check_duplicates_and_empty.py` and `scratch/check_slide_72.py` to map duplicate slides, identifying a 12-slide redundant block (slides 66-77).
+  - Created `scratch/convert_to_pdf.py` to convert the 285MB presentation into a 48MB PDF natively on macOS via AppleScript.
+  - Created `scratch/synthesize_results.py` to merge textual and visual findings into a comprehensive synthesis summary.
+
 ### Changed
 - **Bifrost Integration**: Consolidated local `utils/bifrost_config.py` into a redirection proxy to consume the central client SDK, and refactored it with a hybrid local-prod resolver that queries the live API directly when local workspace paths are absent.
 

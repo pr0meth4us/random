@@ -13,3 +13,11 @@ spot_the_difference/*_fixed.jpg
 social_tools/tiktok_session/
 social_tools/state.json
 *bifrost_cache.json
+
+# Media & presentations
+*.pdf
+*.pptx
+*.png
+*.db
+# Temp & cache directories
+scratch/slide_images/

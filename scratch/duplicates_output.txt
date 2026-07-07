@@ -1,0 +1,65 @@
+Total Slides Checked: 123
+
+--- Duplicate Slides Found ---
+Slide 66 is a DUPLICATE of Slide 54
+Slide 67 is a DUPLICATE of Slide 55
+Slide 68 is a DUPLICATE of Slide 56
+Slide 69 is a DUPLICATE of Slide 57
+Slide 70 is a DUPLICATE of Slide 58
+Slide 71 is a DUPLICATE of Slide 59
+Slide 73 is a DUPLICATE of Slide 61
+Slide 74 is a DUPLICATE of Slide 62
+Slide 75 is a DUPLICATE of Slide 63
+Slide 76 is a DUPLICATE of Slide 64
+Slide 77 is a DUPLICATE of Slide 65
+
+--- Image-Only Slides (No editable text, contains images) ---
+Slide 6 has no text shapes, but has 6 image(s)
+Slide 10 has no text shapes, but has 2 image(s)
+Slide 40 has no text shapes, but has 1 image(s)
+Slide 41 has no text shapes, but has 1 image(s)
+Slide 42 has no text shapes, but has 1 image(s)
+Slide 43 has no text shapes, but has 1 image(s)
+Slide 44 has no text shapes, but has 1 image(s)
+Slide 45 has no text shapes, but has 1 image(s)
+Slide 46 has no text shapes, but has 1 image(s)
+Slide 47 has no text shapes, but has 1 image(s)
+Slide 48 has no text shapes, but has 1 image(s)
+Slide 49 has no text shapes, but has 1 image(s)
+Slide 50 has no text shapes, but has 1 image(s)
+Slide 51 has no text shapes, but has 1 image(s)
+Slide 52 has no text shapes, but has 1 image(s)
+Slide 53 has no text shapes, but has 1 image(s)
+Slide 78 has no text shapes, but has 1 image(s)
+Slide 79 has no text shapes, but has 1 image(s)
+Slide 80 has no text shapes, but has 1 image(s)
+Slide 81 has no text shapes, but has 1 image(s)
+Slide 82 has no text shapes, but has 1 image(s)
+Slide 83 has no text shapes, but has 1 image(s)
+Slide 84 has no text shapes, but has 1 image(s)
+Slide 85 has no text shapes, but has 1 image(s)
+Slide 86 has no text shapes, but has 1 image(s)
+Slide 87 has no text shapes, but has 1 image(s)
+Slide 88 has no text shapes, but has 1 image(s)
+Slide 89 has no text shapes, but has 1 image(s)
+Slide 90 has no text shapes, but has 1 image(s)
+Slide 91 has no text shapes, but has 1 image(s)
+Slide 92 has no text shapes, but has 1 image(s)
+Slide 93 has no text shapes, but has 1 image(s)
+Slide 94 has no text shapes, but has 1 image(s)
+Slide 95 has no text shapes, but has 1 image(s)
+Slide 96 has no text shapes, but has 1 image(s)
+Slide 97 has no text shapes, but has 1 image(s)
+Slide 98 has no text shapes, but has 1 image(s)
+Slide 99 has no text shapes, but has 1 image(s)
+Slide 100 has no text shapes, but has 1 image(s)
+Slide 114 has no text shapes, but has 1 image(s)
+Slide 115 has no text shapes, but has 1 image(s)
+Slide 116 has no text shapes, but has 1 image(s)
+Slide 117 has no text shapes, but has 1 image(s)
+Slide 118 has no text shapes, but has 1 image(s)
+Slide 119 has no text shapes, but has 1 image(s)
+Slide 120 has no text shapes, but has 1 image(s)
+Slide 121 has no text shapes, but has 1 image(s)
+Slide 122 has no text shapes, but has 1 image(s)
+Slide 123 has no text shapes, but has 1 image(s)
