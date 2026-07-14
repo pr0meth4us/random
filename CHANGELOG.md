@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 - Consolidated `stt_experiments` into a single `transcribe_khmer_vocals.py` script and removed obsolete STT test scripts and model files.
+- Organized `scratch/` directory by deleting log/output files and moving PPTX tools and timer scripts into dedicated subfolders (`pptx_tools`, `timer_tools`, `poster_gen`).
 
 ## [Unreleased]
 
