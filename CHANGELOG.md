@@ -9,6 +9,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Khmer Speech-to-Text (STT) pipeline using Demucs for vocal isolation and Gemini Flash for high-accuracy transcription of singing lyrics.
 - `random_stt_agents.md` logbook documenting the STT model experiments and pipeline evolution.
 
+### Changed
+- Consolidated `stt_experiments` into a single `transcribe_khmer_vocals.py` script and removed obsolete STT test scripts and model files.
+
 ## [Unreleased]
 
 ### Changed
