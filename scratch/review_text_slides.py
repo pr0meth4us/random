@@ -4,7 +4,7 @@ from pptx import Presentation
 from google import genai
 
 # Setup API Key
-os.environ["GEMINI_API_KEY"] = "AIzaSyAvXMWisO5U8MhRgRmyVX9G5JkNDVOY-Yg"
+os.environ["GEMINI_API_KEY"] = os.getenv("GEMINI_API_KEY", "")
 client = genai.Client()
 
 def extract_slide_text(slide):

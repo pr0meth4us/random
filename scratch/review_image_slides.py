@@ -5,7 +5,7 @@ from PIL import Image
 from google import genai
 
 # Setup API Key
-os.environ["GEMINI_API_KEY"] = "AIzaSyAvXMWisO5U8MhRgRmyVX9G5JkNDVOY-Yg"
+os.environ["GEMINI_API_KEY"] = os.getenv("GEMINI_API_KEY", "")
 client = genai.Client()
 
 def review_image_slides(image_dir, output_path):
