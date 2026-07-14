@@ -4,9 +4,24 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [2026-07-14]
+### Added
+- Khmer Speech-to-Text (STT) pipeline using Demucs for vocal isolation and Gemini Flash for high-accuracy transcription of singing lyrics.
+- `random_stt_agents.md` logbook documenting the STT model experiments and pipeline evolution.
+
 ## [Unreleased]
 
+### Changed
+- Fixed path resolution in `spotify/spotify_api_fetcher.py` to correctly import local utils.
+- Refactored `mac-cleaner` frontend CSS and React components for improved UI states and layout.
+- Updated `ok.py` spot-the-difference script.
+- Cleaned up obsolete scripts (`convert_pdf_to_pptx.py`, `fix_pptx_backgrounds.py`) and test files (`IMG_4633.HEIC`).
+
 ### Added
+- **Countdown Timer Generation**:
+  - Created `scratch/generate_timer.py` script to generate a customizable Full HD (1920x1080) timer video with a white background, huge centered black text, and warning/alarm beeps.
+  - Added support for a 5-minute countdown that sounds a 3-beep warning (spaced by 100ms) when the timer hits `4:00` remaining.
+  - Generated the final `downloads/5 Minute Timer.mp4` video.
 - **PowerPoint Presentation Review**:
   - Created batch scripts `scratch/inspect_pptx.py`, `scratch/review_text_slides.py`, and `scratch/review_image_slides.py` to analyze 123 slides of `EGD_Slide Presentaton_DA5.pptx` for typos, grammar, and translation issues.
   - Created `scratch/check_duplicates_and_empty.py` and `scratch/check_slide_72.py` to map duplicate slides, identifying a 12-slide redundant block (slides 66-77).

@@ -1,6 +1,7 @@
 import os
 import shutil
 import hashlib
+import time
 from collections import defaultdict
 from pathlib import Path
 from fastapi import FastAPI, HTTPException
@@ -23,7 +24,6 @@ app.add_middleware(
 HOME = str(Path.home())
 TARGET_DIRS = {
     "User Caches": os.path.join(HOME, "Library", "Caches"),
-    "Trash": os.path.join(HOME, ".Trash"),
     # Adding some specific caches to show more granular results
     "NPM Cache": os.path.join(HOME, ".npm", "_cacache"),
     "Pip Cache": os.path.join(HOME, ".cache", "pip")
@@ -186,6 +186,48 @@ def scan_duplicates(path: str, min_size_mb: int = 1):
         "totalWastedBytes": sum(d["totalWastedBytes"] for d in duplicates)
     }
 
+@app.get("/api/large-files")
+def scan_large_files(path: str, min_size_mb: int = 50):
+    path = os.path.expanduser(path)
+    if not os.path.exists(path) or not os.path.isdir(path):
+        raise HTTPException(status_code=404, detail="Directory not found or is not a directory")
+        
+    min_size_bytes = min_size_mb * 1024 * 1024
+    large_files = []
+    target_extensions = {".dmg", ".pkg", ".zip", ".iso"}
+    
+    try:
+        for root, dirs, files in os.walk(path):
+            dirs[:] = [d for d in dirs if not d.startswith('.')]
+            for file in files:
+                filepath = os.path.join(root, file)
+                try:
+                    if os.path.islink(filepath):
+                        continue
+                    size = os.path.getsize(filepath)
+                    _, ext = os.path.splitext(file)
+                    
+                    if size >= min_size_bytes or (ext.lower() in target_extensions and size >= 10 * 1024 * 1024):
+                        large_files.append({
+                            "name": file,
+                            "path": filepath,
+                            "sizeBytes": size,
+                            "extension": ext.lower()
+                        })
+                except Exception:
+                    pass
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+        
+    large_files.sort(key=lambda x: x["sizeBytes"], reverse=True)
+    total_wasted = sum(f["sizeBytes"] for f in large_files)
+    
+    return {
+        "path": path,
+        "items": large_files[:100],  # Limit to top 100 to avoid UI lag
+        "totalSizeBytes": total_wasted
+    }
+
 class CleanRequest(BaseModel):
     paths: List[str]
 
@@ -195,8 +237,6 @@ def clean_files(request: CleanRequest):
     errors = []
     
     for path in request.paths:
-        # Security check: allow cleaning any path for duplicates if explicitly requested.
-        # However, for safety, let's keep it generally open but catch errors.
         try:
             if not os.path.exists(path):
                 continue
@@ -204,10 +244,13 @@ def clean_files(request: CleanRequest):
             size = 0
             if os.path.isfile(path):
                 size = os.path.getsize(path)
-                os.remove(path)
             elif os.path.isdir(path):
                 size = get_dir_size(path)
-                shutil.rmtree(path)
+                
+            # Safely move to Trash using native macOS Trash API
+            from send2trash import send2trash
+            send2trash(path)
+            
             deleted_size += size
         except Exception as e:
             errors.append({"path": path, "error": str(e)})

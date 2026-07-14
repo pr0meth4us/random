@@ -21,3 +21,9 @@ social_tools/state.json
 *.db
 # Temp & cache directories
 scratch/slide_images/
+*.bin
+
+downloads/
+*.json
+*.bin
+*.wav
