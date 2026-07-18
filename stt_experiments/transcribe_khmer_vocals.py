@@ -72,8 +72,8 @@ def transcribe_audio(client: genai.Client, audio_path: str):
         "Only output the transcribed text."
     )
 
-    # Use gemini-1.5-flash since the 2.x models hit quota issues (as documented in random_stt_agents.md)
-    model_name = "gemini-1.5-flash" 
+    # Use gemini-flash-latest
+    model_name = "gemini-flash-latest" 
     print(f"\n--- Step 4: Transcribing with {model_name} ---")
 
     max_retries = 3
