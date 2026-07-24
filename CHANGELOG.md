@@ -1,3 +1,6 @@
+## [2026-07-24] - Workspace Cleanup
+- chore: Reorganized loose scripts, assets, and data files into proper subdirectories to clean up project roots.
+
 # Changelog
 
 All notable changes to this project will be documented in this file.
