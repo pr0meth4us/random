@@ -258,6 +258,23 @@ input[type="checkbox"] {
 .group-title { font-size: 12px; font-weight: 650; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); }
 .group-size { font-size: 12px; color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
 
+/* Plain-language note on what a category holds, sent by the backend. */
+.group-subtitle {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  font-weight: 450;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text-tertiary);
+}
+
+.group-footnote {
+  padding: 8px 4px 0;
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
 .group-card {
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);

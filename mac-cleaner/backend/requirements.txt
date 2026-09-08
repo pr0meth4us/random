@@ -1,4 +1,4 @@
-fastapi
-uvicorn
-pydantic
-send2trash
+fastapi>=0.110
+uvicorn[standard]>=0.27
+pydantic>=2.0        # CleanRequest uses v2 list constraints (min_length/max_length)
+send2trash>=1.8      # moves files to the macOS Trash instead of unlinking them

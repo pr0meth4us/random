@@ -1,12 +1,19 @@
 import { useState } from 'react';
 import './index.css';
 
-const API_BASE = 'http://localhost:8000/api';
+// The literal IP, not `localhost`: the backend binds to 127.0.0.1, and on macOS
+// `localhost` can resolve to ::1 first, which would fail to connect.
+const API_BASE = 'http://127.0.0.1:8000/api';
 
-// Categories that are genuinely safe to bulk-select as "junk."
-// Personal folders (Documents, Downloads, Applications) are deliberately
-// excluded — they should never be pre-checked for deletion.
+// The backend classifies each category and sends a `safe` flag: true only for
+// caches that regenerate on their own. This list is the fallback for an older
+// backend that does not send the flag — personal folders (Documents, Downloads,
+// Applications) must never be pre-checked for deletion.
 const SAFE_JUNK_CATEGORIES = new Set(['User Caches', 'Trash', 'NPM Cache', 'Pip Cache']);
+
+function isSafeCategory(cat) {
+  return typeof cat.safe === 'boolean' ? cat.safe : SAFE_JUNK_CATEGORIES.has(cat.category);
+}
 const DEV_CACHE_NAMES = new Set(['ms-playwright', 'ms-playwright-go', 'pip', 'Homebrew', 'node-gyp', 'next-swc', 'typescript']);
 
 const CATEGORY_STYLE = {
@@ -120,7 +127,7 @@ export default function App() {
   const selectSafeJunk = () => {
     const next = new Set();
     scanResults.forEach((cat) => {
-      if (!SAFE_JUNK_CATEGORIES.has(cat.category)) return;
+      if (!isSafeCategory(cat)) return;
       cat.items.forEach((item) => next.add(item.path));
     });
     setSelectedPaths(next);
@@ -221,15 +228,21 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ paths: Array.from(selectedPaths) }),
       });
+      if (!res.ok) throw new Error('The cleaner rejected the request.');
       const data = await res.json();
       clearSelection();
       setScanned(false);
       setScanResults([]);
       setDuplicateResults(null);
       setLargeFilesResults(null);
-      alert(`Moved ${formatBytes(data.deletedSizeBytes)} to Trash.`);
+      const skipped = (data.errors || []).length;
+      alert(
+        `Moved ${formatBytes(data.deletedSizeBytes)} to Trash.` +
+        (skipped ? `\n\n${skipped} item(s) were skipped:\n` +
+          data.errors.slice(0, 5).map((e) => `\u2022 ${e.path} \u2014 ${e.error}`).join('\n') : '')
+      );
     } catch (err) {
-      alert('Something went wrong while cleaning up. No files were removed.');
+      alert('Something went wrong while cleaning up. Nothing was moved to the Trash.');
     } finally {
       setCleaning(false);
     }
@@ -395,7 +408,7 @@ function SmartScanView({ scanning, scanned, scanResults, totalScanSize, onScan, 
     );
   }
 
-  const safeCategories = scanResults.filter((c) => SAFE_JUNK_CATEGORIES.has(c.category));
+  const safeCategories = scanResults.filter(isSafeCategory);
   const safeTotal = safeCategories.reduce((a, c) => a + c.totalSizeBytes, 0);
 
   return (
@@ -430,7 +443,7 @@ function SmartScanView({ scanning, scanned, scanResults, totalScanSize, onScan, 
         <button className="btn btn-ghost" onClick={onScan}>Rescan</button>
       </div>
 
-      {scanResults.some((c) => !SAFE_JUNK_CATEGORIES.has(c.category)) && (
+      {scanResults.some((c) => !isSafeCategory(c)) && (
         <div className="protected-note">
           <Icon.info />
           Documents, Downloads, and Applications are shown for context but are never auto-selected. Review those in System Junk if you want to remove anything from them.
@@ -465,11 +478,14 @@ function SystemJunkView({ scanning, scanned, scanResults, onScan, selectedPaths,
   return (
     <div>
       {scanResults.map((cat, ci) => {
-        const isPersonal = !SAFE_JUNK_CATEGORIES.has(cat.category);
+        const isPersonal = !isSafeCategory(cat);
         return (
           <div className="group-block" key={cat.category}>
             <div className="group-header">
-              <span className="group-title">{cat.category}</span>
+              <span className="group-title">
+                {cat.category}
+                {cat.description && <span className="group-subtitle">{cat.description}</span>}
+              </span>
               <span className="group-size">{formatBytes(cat.totalSizeBytes)}</span>
             </div>
             <div className="group-card">
@@ -496,6 +512,11 @@ function SystemJunkView({ scanning, scanned, scanResults, onScan, selectedPaths,
                 );
               })}
             </div>
+            {cat.itemCount > cat.items.length && (
+              <div className="group-footnote">
+                Showing the {cat.items.length} largest of {cat.itemCount} items.
+              </div>
+            )}
           </div>
         );
       })}

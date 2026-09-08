@@ -19,6 +19,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Changed
+- **`mac-cleaner` backend — safety, speed, and coverage:**
+  - Constrained the API to local callers: binds to loopback, restricts CORS to local dev origins, and rejects non-loopback `Host` headers (DNS-rebinding guard). Previously it bound to `0.0.0.0` with `allow_origins=["*"]`, so any web page could drive the delete endpoint.
+  - Added path validation: inbound paths are fully resolved (symlinks included) and checked against an allow-list of readable roots; deletion is confined to the home directory and denies structural directories, credential stores, keychains, app-container state, and the iCloud mirror. `/api/clean` previously accepted any path.
+  - Refused paths are now reported with a reason instead of silently skipped, and validation runs before nested paths are collapsed so a refused parent cannot swallow permitted children. Added a `dry_run` option to preview a clean.
+  - Duplicate detection now compares a 128 KB head/tail sample before hashing whole files, and uses blake2b instead of md5 — ~19x faster on a tree of same-size files. Hard links and clones no longer count as recoverable waste.
+  - Directory walking is iterative (no recursion limit on deep trees) and reuses `scandir` stat data; hard links are counted once; category scans and per-folder sizing run concurrently; results are briefly cached with a `refresh` override.
+  - Broadened scan coverage: Trash, Xcode derived data/device support/archives, uv, Cargo, Gradle, Maven, pnpm and Docker, each with a `safe` flag and a plain-language description the UI now shows.
+  - Split the pure logic into `safety.py` and `scanner.py` and added `test_backend.py` — 28 stdlib tests covering the path rules, hard-link accounting, and symlink escapes.
+- **`mac-cleaner` frontend:** uses the backend's per-category `safe` flag instead of a hardcoded list, points at `127.0.0.1` (avoids `localhost` resolving to `::1`), reports per-path skip reasons after a clean, and notes when a category list is truncated.
 - Fixed path resolution in `spotify/spotify_api_fetcher.py` to correctly import local utils.
 - Refactored `mac-cleaner` frontend CSS and React components for improved UI states and layout.
 - Updated `ok.py` spot-the-difference script.
