@@ -226,6 +226,86 @@ class TestLargeFiles(SandboxHome):
         self.assertEqual(items, [])
 
 
+class TestDevArtifacts(SandboxHome):
+    def project(self, rel, marker=None, marker_body=b"{}"):
+        d = os.path.join(self.home, rel)
+        os.makedirs(d, exist_ok=True)
+        if marker:
+            with open(os.path.join(d, marker), "wb") as f:
+                f.write(marker_body)
+        return d
+
+    def filled(self, path, size=50_000):
+        os.makedirs(path, exist_ok=True)
+        with open(os.path.join(path, "blob"), "wb") as f:
+            f.write(b"x" * size)
+        return path
+
+    def test_finds_marked_node_modules(self):
+        proj = self.project("code/app", "package.json")
+        self.filled(os.path.join(proj, "node_modules"))
+        items, total = self.scanner.find_dev_artifacts(os.path.join(self.home, "code"))
+        self.assertEqual([i["name"] for i in items], ["node_modules"])
+        self.assertEqual(items[0]["project"], "app")
+        self.assertEqual(total, 50_000)
+
+    def test_ignores_unmarked_lookalike(self):
+        # A folder called node_modules with no package.json beside it is not
+        # something we can prove is regenerable.
+        self.filled(os.path.join(self.home, "code/notaproject/node_modules"))
+        items, _ = self.scanner.find_dev_artifacts(os.path.join(self.home, "code"))
+        self.assertEqual(items, [])
+
+    def test_ignores_handwritten_build_directory(self):
+        # `build` with no project marker beside it may well be source.
+        self.filled(os.path.join(self.home, "code/docs/build"))
+        items, _ = self.scanner.find_dev_artifacts(os.path.join(self.home, "code"))
+        self.assertEqual(items, [])
+
+    def test_virtualenv_needs_pyvenv_cfg(self):
+        bare = self.filled(os.path.join(self.home, "code/p1/.venv"))
+        items, _ = self.scanner.find_dev_artifacts(os.path.join(self.home, "code"))
+        self.assertEqual(items, [])
+        open(os.path.join(bare, "pyvenv.cfg"), "wb").close()
+        items, _ = self.scanner.find_dev_artifacts(os.path.join(self.home, "code"))
+        self.assertEqual([i["name"] for i in items], [".venv"])
+
+    def test_does_not_descend_into_a_match(self):
+        # A nested node_modules is already counted inside its parent's total;
+        # reporting it again would double-count and waste the walk.
+        proj = self.project("code/app", "package.json")
+        nested = os.path.join(proj, "node_modules/dep")
+        self.project("code/app/node_modules/dep", "package.json")
+        self.filled(os.path.join(nested, "node_modules"))
+        items, total = self.scanner.find_dev_artifacts(os.path.join(self.home, "code"))
+        self.assertEqual([i["path"] for i in items], [os.path.join(proj, "node_modules")])
+        # The nested tree is counted once, inside its parent's total, not twice.
+        self.assertEqual(total, items[0]["sizeBytes"])
+        self.assertGreaterEqual(total, 50_000)
+
+    def test_never_enters_git(self):
+        self.filled(os.path.join(self.home, "code/app/.git/objects"))
+        self.project("code/app", "package.json")
+        items, _ = self.scanner.find_dev_artifacts(os.path.join(self.home, "code"))
+        self.assertEqual(items, [])
+
+    def test_unconditional_kinds_need_no_marker(self):
+        self.filled(os.path.join(self.home, "code/app/__pycache__"))
+        items, _ = self.scanner.find_dev_artifacts(os.path.join(self.home, "code"))
+        self.assertEqual([i["name"] for i in items], ["__pycache__"])
+
+    def test_respects_minimum_size(self):
+        proj = self.project("code/app", "package.json")
+        self.filled(os.path.join(proj, "node_modules"), size=100)
+        items, _ = self.scanner.find_dev_artifacts(os.path.join(self.home, "code"), 1_000_000)
+        self.assertEqual(items, [])
+
+    def test_artifacts_are_deletable_under_the_safety_rules(self):
+        proj = self.project("code/app", "package.json")
+        nm = self.filled(os.path.join(proj, "node_modules"))
+        self.assertIsNone(self.safety.deletion_refusal(nm))
+
+
 class TestResultCache(unittest.TestCase):
     def test_memoises_until_refresh(self):
         cache = self.scanner_cache()

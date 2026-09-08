@@ -69,6 +69,7 @@ cache = scanner.ResultCache()
 ITEMS_PER_CATEGORY = 50
 MAX_LARGE_FILES = 100
 MAX_DUPLICATE_GROUPS = 200
+MAX_DEV_ARTIFACTS = 200
 
 
 def readable(raw: str) -> str:
@@ -167,6 +168,28 @@ def scan_large_files(path: str, min_size_mb: float = 50):
         "itemCount": len(items),
         "totalSizeBytes": total,
     }
+
+
+@app.get("/api/dev-artifacts")
+def scan_dev_artifacts(path: str, min_size_mb: float = 10, refresh: bool = False):
+    """Find regenerable build and dependency directories under a project folder.
+
+    Never bulk-selectable: removing `node_modules` costs a reinstall, and only
+    the person who owns the project knows whether that is convenient right now.
+    """
+    resolved = readable(path)
+    min_size_bytes = max(0, int(min_size_mb * 1024 * 1024))
+
+    def run():
+        items, total = scanner.find_dev_artifacts(resolved, min_size_bytes)
+        return {
+            "path": resolved,
+            "items": items[:MAX_DEV_ARTIFACTS],
+            "itemCount": len(items),
+            "totalSizeBytes": total,
+        }
+
+    return cache.get_or_compute(f"dev:{resolved}:{min_size_bytes}", run, refresh)
 
 
 class CleanRequest(BaseModel):

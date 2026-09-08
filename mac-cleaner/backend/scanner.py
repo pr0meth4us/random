@@ -14,6 +14,7 @@ import threading
 import time
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from typing import Any, Callable, Dict, Iterator, List, Optional, Set, Tuple
 
 # On a real machine most walk errors just mean "not ours to look at" — a
@@ -251,6 +252,131 @@ def find_large_files(root: str, min_size_bytes: int) -> Tuple[List[Dict[str, Any
             total += st.st_size
     found.sort(key=lambda f: f["sizeBytes"], reverse=True)
     return found, total
+
+
+# ---------------------------------------------------------------------------
+# Developer build artifacts
+# ---------------------------------------------------------------------------
+@dataclass(frozen=True)
+class ArtifactKind:
+    """A regenerable build/dependency directory.
+
+    Names like `build`, `dist` and `target` are ambiguous — plenty of projects
+    keep hand-written source in a folder called `build`. So most kinds are gated
+    on a marker that proves what produced the directory: either a sibling file
+    next to it (`package.json` beside `node_modules`) or a file inside it
+    (`pyvenv.cfg` inside `.venv`). Unmarked candidates are left alone.
+    """
+
+    name: str
+    label: str
+    siblings: Tuple[str, ...] = ()
+    contains: Tuple[str, ...] = ()
+
+    def matches(self, sibling_names: Set[str], path: str) -> bool:
+        if self.siblings and not sibling_names.intersection(self.siblings):
+            return False
+        if self.contains and not any(
+            os.path.exists(os.path.join(path, marker)) for marker in self.contains
+        ):
+            return False
+        return True
+
+
+ARTIFACT_KINDS: Tuple[ArtifactKind, ...] = (
+    ArtifactKind("node_modules", "npm dependencies", siblings=("package.json",)),
+    ArtifactKind(".venv", "Python virtualenv", contains=("pyvenv.cfg",)),
+    ArtifactKind("venv", "Python virtualenv", contains=("pyvenv.cfg",)),
+    ArtifactKind("env", "Python virtualenv", contains=("pyvenv.cfg",)),
+    ArtifactKind("__pycache__", "Python bytecode"),
+    ArtifactKind(".pytest_cache", "pytest cache"),
+    ArtifactKind(".mypy_cache", "mypy cache"),
+    ArtifactKind(".ruff_cache", "ruff cache"),
+    ArtifactKind(".tox", "tox environments"),
+    ArtifactKind("target", "Rust/Java build output",
+                 siblings=("Cargo.toml", "pom.xml", "build.gradle", "build.gradle.kts")),
+    ArtifactKind("build", "build output",
+                 siblings=("package.json", "pyproject.toml", "setup.py", "CMakeLists.txt")),
+    ArtifactKind("dist", "build output",
+                 siblings=("package.json", "pyproject.toml", "setup.py")),
+    ArtifactKind(".next", "Next.js build cache"),
+    ArtifactKind(".nuxt", "Nuxt build cache"),
+    ArtifactKind(".svelte-kit", "SvelteKit build cache"),
+    ArtifactKind(".turbo", "Turborepo cache"),
+    ArtifactKind(".parcel-cache", "Parcel cache"),
+    ArtifactKind(".angular", "Angular cache"),
+    ArtifactKind(".gradle", "Gradle project cache"),
+    ArtifactKind(".terraform", "Terraform providers"),
+    ArtifactKind("Pods", "CocoaPods dependencies", siblings=("Podfile",)),
+    ArtifactKind("DerivedData", "Xcode build output"),
+    ArtifactKind("vendor", "Composer dependencies", siblings=("composer.json",)),
+)
+
+_KINDS_BY_NAME: Dict[str, List[ArtifactKind]] = defaultdict(list)
+for _kind in ARTIFACT_KINDS:
+    _KINDS_BY_NAME[_kind.name].append(_kind)
+
+# Never descend into these, and never report them: version history is not a
+# build artifact, and walking it is pure waste.
+_NEVER_ENTER = {".git", ".hg", ".svn", ".Trash"}
+
+
+def find_dev_artifacts(root: str, min_size_bytes: int = 0) -> Tuple[List[Dict[str, Any]], int]:
+    """Find regenerable build and dependency directories under `root`.
+
+    A matched directory is measured but not descended into during discovery.
+    That keeps the accounting honest — a nested `node_modules` belongs to its
+    parent's total, not to a second entry of its own — and stops the walk from
+    re-entering trees that are already accounted for. Sizing still reads each
+    matched tree once, so this is not free; it is just not paid twice.
+    """
+    matches: List[Tuple[str, str]] = []  # (path, label)
+    stack = [root]
+    while stack:
+        current = stack.pop()
+        try:
+            with os.scandir(current) as it:
+                entries = list(it)
+        except _SKIPPABLE:
+            continue
+
+        names = {e.name for e in entries}
+        for entry in entries:
+            try:
+                if not entry.is_dir(follow_symlinks=False):
+                    continue
+            except _SKIPPABLE:
+                continue
+            if entry.name in _NEVER_ENTER:
+                continue
+            kind = next(
+                (k for k in _KINDS_BY_NAME.get(entry.name, ()) if k.matches(names, entry.path)),
+                None,
+            )
+            if kind:
+                matches.append((entry.path, kind.label))
+            else:
+                stack.append(entry.path)
+
+    if not matches:
+        return [], 0
+
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
+        sizes = list(pool.map(lambda m: get_dir_size(m[0]), matches))
+
+    items = [
+        {
+            "name": os.path.basename(path),
+            "path": path,
+            "project": os.path.basename(os.path.dirname(path)),
+            "kind": label,
+            "sizeBytes": size,
+        }
+        for (path, label), size in zip(matches, sizes)
+        if size >= min_size_bytes
+    ]
+    items.sort(key=lambda i: i["sizeBytes"], reverse=True)
+    return items, sum(i["sizeBytes"] for i in items)
 
 
 # ---------------------------------------------------------------------------

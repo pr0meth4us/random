@@ -54,6 +54,23 @@ move.
 flag; personal folders (Documents, Downloads, Applications) are shown for
 context but never pre-checked.
 
+## Build Artifacts
+
+Dependency and build folders (`node_modules`, `.venv`, `target`, `.next`, …)
+are usually the largest reclaimable thing on a developer's machine, and they
+sit in project folders rather than in any cache directory.
+
+Ambiguity is handled with markers rather than name matching alone: a folder
+called `build` or `dist` may well be hand-written source, so most kinds are
+only reported when something proves what produced them — `package.json` beside
+`node_modules`, `pyvenv.cfg` inside `.venv`, `Cargo.toml` beside `target`. An
+unmarked candidate is left alone. `.git` is never entered.
+
+A matched folder is not descended into, so a nested `node_modules` counts once,
+inside its parent. Nothing here is ever bulk-selected: these regenerate, but
+regenerating costs an install or a compile, and only you know whether that is
+convenient right now.
+
 ## Layout
 
 | File | Role |

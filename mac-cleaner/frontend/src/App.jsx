@@ -92,6 +92,10 @@ export default function App() {
   const [duplicateResults, setDuplicateResults] = useState(null);
   const [duplicateError, setDuplicateError] = useState(null);
   const [dupKeep, setDupKeep] = useState({}); // hash -> path kept
+  const [devPath, setDevPath] = useState('~/code');
+  const [devResults, setDevResults] = useState(null);
+  const [scanningDev, setScanningDev] = useState(false);
+  const [devError, setDevError] = useState(null);
 
   // Large files
   const [largeFilesPath, setLargeFilesPath] = useState('~/');
@@ -198,6 +202,23 @@ export default function App() {
     setSelectedPaths(next);
   };
 
+  /* ---------------- Dev artifacts ---------------- */
+  const handleScanDevArtifacts = async () => {
+    if (!devPath.trim()) return;
+    setScanningDev(true);
+    setDevError(null);
+    setDevResults(null);
+    try {
+      const res = await fetch(`${API_BASE}/dev-artifacts?path=${encodeURIComponent(devPath)}`);
+      if (!res.ok) throw new Error('Folder not found, or permission was denied.');
+      setDevResults(await res.json());
+    } catch (err) {
+      setDevError(err.message);
+    } finally {
+      setScanningDev(false);
+    }
+  };
+
   /* ---------------- Large files ---------------- */
   const handleScanLargeFiles = async () => {
     if (!largeFilesPath.trim()) return;
@@ -254,6 +275,7 @@ export default function App() {
     { id: 'space-lens', label: 'Space Lens', icon: Icon.lens },
     { id: 'duplicates', label: 'Duplicates', icon: Icon.dup },
     { id: 'large-files', label: 'Large Files', icon: Icon.large },
+    { id: 'dev-artifacts', label: 'Build Artifacts', icon: Icon.terminal },
   ];
 
   const PAGE_COPY = {
@@ -261,6 +283,7 @@ export default function App() {
     'system-junk': ['System Junk', 'Review each category and choose exactly what to remove.'],
     'space-lens': ['Space Lens', 'Browse any folder to see what\u2019s using space.'],
     'duplicates': ['Duplicates', 'Find identical files and keep only one copy.'],
+    'dev-artifacts': ['Build Artifacts', 'Dependency and build folders your tools can rebuild.'],
     'large-files': ['Large Files', 'Find large files taking up space, sorted by size.'],
   };
 
@@ -352,6 +375,19 @@ export default function App() {
                 largeFilesResults={largeFilesResults}
                 largeFilesError={largeFilesError}
                 onScan={handleScanLargeFiles}
+                selectedPaths={selectedPaths}
+                togglePath={togglePath}
+              />
+            )}
+
+            {activeTab === 'dev-artifacts' && (
+              <DevArtifactsView
+                devPath={devPath}
+                setDevPath={setDevPath}
+                scanningDev={scanningDev}
+                devResults={devResults}
+                devError={devError}
+                onScan={handleScanDevArtifacts}
                 selectedPaths={selectedPaths}
                 togglePath={togglePath}
               />
@@ -668,6 +704,80 @@ function DuplicatesView({ duplicatePath, setDuplicatePath, scanningDups, duplica
             </>
           )}
         </>
+      )}
+    </div>
+  );
+}
+
+/* ============================================================
+   Build Artifacts — dependency and build folders that tools rebuild
+   ============================================================ */
+function DevArtifactsView({ devPath, setDevPath, scanningDev, devResults, devError, onScan, selectedPaths, togglePath }) {
+  return (
+    <div>
+      <div className="path-toolbar">
+        <input
+          className="path-input"
+          value={devPath}
+          onChange={(e) => setDevPath(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && onScan()}
+          placeholder="~/code"
+        />
+        <button className="btn btn-primary" onClick={onScan} disabled={scanningDev}>
+          {scanningDev ? 'Scanning…' : 'Scan'}
+        </button>
+      </div>
+
+      <div className="protected-note">
+        <Icon.info />
+        These rebuild from your lockfiles and source — but rebuilding costs an install or a
+        compile, so nothing here is ever selected for you. Pick per project.
+      </div>
+
+      {devError && <div className="error-banner">{devError}</div>}
+      {scanningDev && <div className="loading-state">Looking for build artifacts…</div>}
+
+      {devResults && (
+        devResults.items.length === 0 ? (
+          <div className="empty-clean-state">
+            <Icon.checkCircle className="empty-clean-icon" />
+            <div className="empty-clean-title">No build artifacts found</div>
+          </div>
+        ) : (
+          <>
+            <div className="flex justify-between items-center mb-4">
+              <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                {formatBytes(devResults.totalSizeBytes)} across {devResults.itemCount} folder
+                {devResults.itemCount === 1 ? '' : 's'}
+              </span>
+            </div>
+            <div className="group-card">
+              {devResults.items.map((item) => (
+                <label className="row" key={item.path}>
+                  <input
+                    type="checkbox"
+                    checked={selectedPaths.has(item.path)}
+                    onChange={() => togglePath(item.path)}
+                  />
+                  <RowIcon category="Dev" index={2} />
+                  <div className="row-main">
+                    <span className="row-name">
+                      {item.project}/{item.name}
+                      <span className="badge badge-warning">{item.kind}</span>
+                    </span>
+                    <span className="row-path">{item.path}</span>
+                  </div>
+                  <span className="row-size">{formatBytes(item.sizeBytes)}</span>
+                </label>
+              ))}
+            </div>
+            {devResults.itemCount > devResults.items.length && (
+              <div className="group-footnote">
+                Showing the {devResults.items.length} largest of {devResults.itemCount} folders.
+              </div>
+            )}
+          </>
+        )
       )}
     </div>
   );
