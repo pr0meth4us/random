@@ -27,3 +27,7 @@ downloads/
 *.json
 *.bin
 *.wav
+
+# Telegram Telethon session files (contain live auth tokens)
+*.session
+*.session-journal

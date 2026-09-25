@@ -1,10 +1,7 @@
 import asyncio
 from telethon import TelegramClient
 from telethon.errors import SessionPasswordNeededError, FloodWaitError
-
-API_ID = 37786064
-API_HASH = "0c5906ff45140b5b9192fe10ffbb6e83"
-PHONE = "+855962021314"
+from _config import API_ID, API_HASH, PHONE
 
 async def main():
     client = TelegramClient('anon', API_ID, API_HASH)
