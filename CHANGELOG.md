@@ -1,3 +1,51 @@
+## [2026-10-07] - Keep personal media out of the repo
+- chore: `.gitignore` now excludes recordings (`*.m4a`), transcripts, generated `.docx`, photos, `dgc/`, `scratch/`, `graphify-out/`; untracked the stray `stt_experiments` recording. `gemini_tools` scripts load `.env` relative to the repo instead of an absolute home path.
+
+## [2026-10-07] - Embed fonts into PowerPoint decks
+- feat: `document_converters/pptx_embed_fonts.py` — `IN.pptx OUT.pptx FONT.ttf...` embeds TrueType fonts so a deck renders on machines without them. Matches each font to a typeface the deck actually uses (legacy family, typographic family or full name, case-insensitive; a full-name match like "Lato Light Italic" goes in the regular slot), picks the style slot from nameID 2 (some static instances have wrong fsSelection bits), keeps existing embedded entries and fills only empty slots. Writes uncompressed EOT v2.2 `.fntdata` (layout checked against Google Slides exports). Refuses CFF `.otf` and variable fonts (instantiate a static TTF first). `--selftest`.
+
+## [2026-10-06] - Telegram QR login survives a pending 2FA session
+- fix: `chat_tools/qr_login.py` — when a previous scan left the session waiting on the 2FA password, `qr_login()` raised `SessionPasswordNeededError` outside the try and crashed; it now prompts for the password instead.
+
+## [2026-09-17] - Word comments and tracked deletions on exact text
+- feat: `document_converters/docx_comment.py` — anchor a Word comment on exact text (paragraphs + table cells), splitting runs so the range covers only the phrase. `IN OUT --find TEXT --comment MSG` or `--batch json`; never overwrites IN. `--selftest`.
+- feat: `document_converters/docx_track_delete.py` — delete text as Word tracked changes (`w:del`). `track_delete(src, dst, find_spans, author)` takes a callback over each paragraph's current text; existing insertions/deletions, hyperlinks, fields and tab/break runs are treated as barriers (spans touching them are skipped, not half-applied). `views()` returns accepted/rejected text for verification. `--selftest`.
+
+## [2026-09-17] - Find documents among thousands of photos
+- feat: `image_tools/vision_scan.swift` — on-device Apple Vision over folders of photos: default mode prints scene labels (e.g. `document`, `printed_page`, `passport`) to shortlist paperwork; `--text-fast` reads English/French text. `--text` (accurate) is unreliable on macOS 27.0 (e5rtError 13 partway through runs) — documented in the file. Build with `swiftc -O` outside `/tmp`.
+- feat: `image_tools/contact_sheet.py` — tiles many images (HEIC via `sips`) into numbered grids + `index.tsv`, for reviewing hundreds of candidates quickly.
+- feat: `ocr_tools/ocr_images.py` — Cloud Vision OCR over a list of photos into a JSONL cache (shrinks to JPEG first; skips cached paths so reruns never pay twice; failures uncached). Reuses `pdf_ocr.ocr_image` + bifrost client. `--selftest`.
+
+## [2026-09-17] - Move photos by the date they were taken
+- feat: `image_tools/move_by_capture_date.py` — `SRC... DEST --from YYYY-MM [--to YYYY-MM] [--by-month] [--apply]`. SRC is a folder (files are moved) or zip files (only matching files are extracted, via a `.part` rename so an interrupted run leaves no truncated file; reruns skip same-size files). Picks photos/videos whose embedded date (EXIF for JPG/HEIC/PNG, QuickTime `creationdate`/`mvhd` for MOV/MP4) falls in the range. Dry run by default; skips files modified in the last 2 minutes so it can run beside an unzip in progress; never overwrites. Files with no embedded date (saved/received images, screenshots) stay put. `--selftest` checks the parsers offline.
+
+## [2026-09-14] - Vision paragraphs with bounding boxes
+- feat: `ocr_tools/pdf_ocr.py` — `ocr_image_paragraphs(png_bytes, client)` returns Vision paragraphs as `{"text", "box"}` in the image's pixel space, with detected word and line breaks kept in the text; `paragraphs_from_annotation` does the flattening and is testable offline. For cropping a known piece of text (a headword, an item number) out of a scanned page.
+
+## [2026-09-14] - Read selected PDF pages (OCR or copy-only Gemini)
+- feat: `ocr_tools/pdf_page_reader.py` — `pick_pages` (title pages + middle + last), `ocr_pdf_pages` (Cloud Vision over those pages, reusing `pdf_ocr`), `transcribe_pdf_pages` (Gemini copies printed text into caller's JSON schema with `COPY_ONLY_RULES`). For identifying scanned documents with meaningless filenames. Warning recorded in the module: on degraded Khmer scans Gemini flash and pro both invented title subjects at high confidence, so prefer the Vision path and verify Gemini output.
+
+## [2026-09-14] - Vertex region override
+- feat: `gemini_tools/transcribe_audio.py` — `get_vertex_client(location=None)` takes an optional region. Existing calls are unchanged (Bifrost's `VERTEX_AI_LOCATION`, else `asia-southeast1`). Added because `gemini-2.5-pro` returns 404 in `asia-southeast1` and is served in `us-central1` / `global`.
+
+## [2026-08-14] - PDF to PPTX conversion
+- feat: `document_converters/pdf_to_pptx.py` — Generic utility script to convert PDFs into high-resolution PPTX files using PyMuPDF and python-pptx.
+
+## [2026-08-11] - PPTX translation
+- feat: `document_converters/pptx_translate.py` — layout-preserving .pptx translation for any language pair. Rewrites text in place (images, fonts, placement untouched), translates each text box as a whole so a sentence broken across lines is not translated in halves, and takes house terminology from an external `--glossary` json (`render` / `keep_english` / `notes`) so no project vocabulary lives in the tool. `--dry-run` prints what would be sent; `--selftest` checks the parsing and write-back logic offline.
+
+## [2026-07-27] - Audio Transcription, Governance & PPTX Meeting Minutes Exporter
+- feat: `gemini_tools/transcribe_audio.py` — Vertex AI Gemini 2.5 Flash verbatim audio transcription pipeline with automatic FFmpeg 16kHz mono chunking.
+- feat: `gemini_tools/format_and_export_docx.py` — Idea-by-idea & Taskforce Governance Manual generator with Kantumruy Pro typography, natural Khmer spacing, and code-switched English term preservation.
+- feat: `gemini_tools/generate_meeting_minutes.py` — PPTX slide flow extractor & Meeting Minutes generator matching presentation agenda in Kantumruy Pro DOCX.
+
+
+
+## [2026-07-24] - Shared utility hub
+- feat: `ocr_tools/pdf_ocr.py` — `render_pdf_page` / `ocr_image` / `ocr_pdf_page` glue (Vision client sourced from bifrost).
+- feat: `json_tools/gemini_json.py` — `strip_json_fences` / `parse_gemini_json` for Gemini responses.
+- docs: `AGENTS.md` establishing this repo as the cross-project utility hub (reuse + upgrade here; keep project-specific code out).
+
 ## [2026-07-24] - Workspace Cleanup
 - chore: Reorganized loose scripts, assets, and data files into proper subdirectories to clean up project roots.
 

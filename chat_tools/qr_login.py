@@ -11,7 +11,15 @@ async def main():
     
     if not await client.is_user_authorized():
         print("Generating QR code for login...")
-        qr_login = await client.qr_login()
+        try:
+            qr_login = await client.qr_login()
+        except SessionPasswordNeededError:
+            # an earlier scan was accepted; only the 2FA password is missing
+            password = getpass.getpass("Please enter your Telegram cloud password: ")
+            await client.sign_in(password=password)
+            print("Logged in successfully with password!")
+            await client.disconnect()
+            return
         
         print("\n=== NO CODE NEEDED! ===")
         print("Please scan the QR code below with your Telegram App:")

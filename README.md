@@ -5,7 +5,7 @@ scripts i wrote because i was mildly inconvenienced. nothing serious.
 ---
 
 - **chat_tools** — turns facebook messenger html exports into something useful
-- **image_tools** — makes images smaller
+- **image_tools** — makes images smaller, sorts photos by the date they were taken
 - **gemini_tools** — general Gemini utilities (quick terminal chat, list models)
 - **downloaders** — youtube to m4a
 - **document_converters** — pdf/excel/txt stuff

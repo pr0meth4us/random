@@ -31,3 +31,13 @@ downloads/
 # Telegram Telethon session files (contain live auth tokens)
 *.session
 *.session-journal
+
+# Personal recordings, transcripts and generated docs (keep local)
+*.m4a
+*.docx
+*_transcription.txt
+*.jpg
+dgc/
+scratch/
+graphify-out/
+meeting minute
